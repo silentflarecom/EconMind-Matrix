@@ -168,73 +168,151 @@ See [SETUP.md](SETUP.md) for details.
 - [x] Data quality analysis and cleaning tools
 - [x] Database backup/restore functionality
 
-### 🔄 Phase 2: Policy Parallel Corpus (In Progress)
+### 🔄 Phase 2: Policy Parallel Corpus (Code Complete - Needs Testing)
 > Target: End of December 2025
 
-- [ ] **PDF Parsing Module**
-  - [ ] Install and configure Marker (AI PDF → Markdown)
-  - [ ] Parse PBOC "Monetary Policy Implementation Report"
-  - [ ] Parse Fed Beige Book / FOMC Minutes
-  
-- [ ] **Paragraph Alignment Module**
-  - [ ] Sentence-BERT semantic similarity calculation
-  - [ ] Topic-level alignment (inflation, employment, interest rates, etc.)
-  - [ ] Alignment result storage and export
+**✅ Code Implementation Completed (2024-12-14):**
 
-- [ ] **Frontend Display**
-  - [ ] Policy comparison view component
-  - [ ] Side-by-side dual column display
+- [x] **Data Models** (`layer2-policy/backend/models.py`)
+  - [x] PolicyReport, PolicyParagraph, PolicyAlignment dataclasses
+  - [x] Database schema for Layer 2 tables
+  - [x] 8 policy topics with bilingual keywords (inflation, employment, etc.)
+  - [x] Topic detection via keyword matching
+
+- [x] **PDF Parsing Module** (`layer2-policy/backend/pdf_parser.py`)
+  - [x] Marker integration for AI-powered PDF→Markdown conversion
+  - [x] PyPDF2 fallback for basic text extraction
+  - [x] Automatic title and date extraction
+  - [x] Paragraph splitting with topic detection
+  - [x] Section-aware parsing for PBOC and Fed reports
+  - [x] Sample data included for testing without real PDFs
+
+- [x] **Paragraph Alignment Module** (`layer2-policy/backend/alignment.py`)
+  - [x] Sentence-BERT semantic similarity (multilingual)
+  - [x] Topic-based alignment fallback
+  - [x] Keyword overlap fallback for systems without PyTorch
+  - [x] Embedding caching for performance
+  - [x] Term-specific filtering (link to Layer 1)
+
+- [x] **Database Operations** (`layer2-policy/backend/database.py`)
+  - [x] Async CRUD for reports, paragraphs, alignments
+  - [x] Statistics endpoint
+  - [x] Term search across policy paragraphs
+
+- [x] **API Endpoints** (`layer2-policy/backend/api.py`)
+  - [x] POST `/upload` - Upload and parse PDF
+  - [x] POST `/upload-text` - Upload text (testing)
+  - [x] GET `/reports` - List reports
+  - [x] POST `/align` - Run alignment
+  - [x] GET `/alignments` - Query alignments
+  - [x] GET `/search/{term}` - Search term in policies
+  - [x] GET `/topics` - List policy topics
+  - [x] GET `/stats` - Layer 2 statistics
+
+**⏳ Pending Testing:**
+- [ ] Install dependencies: `pip install -r layer2-policy/requirements.txt`
+- [ ] Download test PDFs (PBOC 2024Q3, Fed December Beige Book)
+- [ ] Test PDF parsing with Marker
+- [ ] Test alignment with Sentence-BERT
+- [ ] Integrate Layer 2 router into main.py
+- [ ] Create frontend PolicyComparison component
 
 ### 📅 Phase 3: Sentiment & Trend Corpus (January 2026)
 
-- [ ] **News Crawler**
-  - [ ] RSS Feed parsing (Bloomberg, Reuters)
-  - [ ] Chinese financial news sources (Caixin, Yicai)
-  - [ ] Rate limiting and compliance handling
+**🔧 Code Framework Created:**
+- [x] News crawler structure (`layer3-sentiment/crawler/news_crawler.py`)
+- [x] LLM annotator structure (`layer3-sentiment/annotation/llm_annotator.py`)
+- [x] Rule-based fallback annotator (works without API)
 
-- [ ] **Sentiment Annotation**
-  - [ ] Gemini API pre-annotation (bullish/bearish/neutral)
-  - [ ] Doccano platform deployment
-  - [ ] Human-in-the-loop verification workflow
-
-- [ ] **Trend Analysis**
-  - [ ] Term frequency time series
-  - [ ] Market index overlay (S&P500, Shanghai Composite)
-  - [ ] ECharts visualization
+**⏳ Pending Implementation:**
+- [ ] RSS Feed integration (Bloomberg, Reuters)
+- [ ] Gemini API integration for sentiment prediction
+- [ ] Doccano export/import scripts
+- [ ] Time series analysis module
+- [ ] ECharts visualization component
 
 ### 🎯 Phase 4: Three-Layer Integration (February 2026)
 
 - [ ] **Unified API**
-  - [ ] `/search/{term}` → Returns three-layer data
-  - [ ] `/trend/{term}` → Returns time series data
-  - [ ] `/compare` → Policy comparison endpoint
+  - [ ] `/api/v1/search/{term}` → Returns three-layer data
+  - [ ] `/api/v1/trend/{term}` → Returns time series data
+  - [ ] Layer 2 `/policy/search/{term}` already implemented
 
 - [ ] **Integrated Interface**
   - [ ] Three-column layout (Definition | Policy | Sentiment)
-  - [ ] Interactive knowledge graph
+  - [ ] Interactive knowledge graph with policy links
   - [ ] Trend chart visualization
 
 - [ ] **Dataset Export**
+  - [x] Export script structure (`scripts/export_dataset.py`)
   - [ ] Complete dataset packaging
   - [ ] Statistics report generation
-  - [ ] Quality validation tools
 
 ### 🏆 Phase 5: Competition Submission (March 2026)
 
 - [ ] **Documentation**
-  - [ ] Technical solution document (30-50 pages)
+  - [x] Technical architecture (`docs/architecture.md`)
+  - [x] API documentation (`docs/api.md`)
+  - [ ] Full technical solution document (30-50 pages)
   - [ ] Dataset description document
-  - [ ] API usage documentation
 
 - [ ] **Demo Preparation**
-  - [ ] Online demo deployment
-  - [ ] Demo video production
+  - [ ] Online demo deployment (Vercel + Railway)
+  - [ ] Demo video production (5-10 min)
   - [ ] PPT presentation materials
 
 - [ ] **Data Scale Targets**
   - [ ] 500+ economic terms × 20 languages
   - [ ] 10+ policy report alignments
   - [ ] 5000+ news sentiment annotations
+
+---
+
+## 📋 Current Development Status
+
+**Last Updated:** 2024-12-14 20:45
+
+### What's Completed
+
+| Component | Status | Files |
+|:----------|:------:|:------|
+| Layer 1 Backend | ✅ Complete | `backend/main.py`, `database.py`, etc. |
+| Layer 1 Frontend | ✅ Complete | `frontend/src/` (6 components) |
+| Layer 2 Models | ✅ Complete | `layer2-policy/backend/models.py` |
+| Layer 2 PDF Parser | ✅ Complete | `layer2-policy/backend/pdf_parser.py` |
+| Layer 2 Alignment | ✅ Complete | `layer2-policy/backend/alignment.py` |
+| Layer 2 Database | ✅ Complete | `layer2-policy/backend/database.py` |
+| Layer 2 API | ✅ Complete | `layer2-policy/backend/api.py` |
+| Layer 3 Crawler | 🔧 Framework | `layer3-sentiment/crawler/news_crawler.py` |
+| Layer 3 Annotator | 🔧 Framework | `layer3-sentiment/annotation/llm_annotator.py` |
+| Export Scripts | 🔧 Framework | `scripts/export_dataset.py` |
+| Documentation | ✅ Complete | `docs/architecture.md`, `docs/api.md` |
+
+### Next Actions
+
+1. **Test Layer 2 Components**
+   ```bash
+   cd layer2-policy
+   pip install -r requirements.txt
+   cd backend
+   python pdf_parser.py  # Test with sample data
+   python alignment.py   # Test alignment
+   python database.py    # Test database
+   ```
+
+2. **Download Test PDFs**
+   - PBOC: http://www.pbc.gov.cn/ (2024年第三季度货币政策执行报告)
+   - Fed: https://www.federalreserve.gov/monetarypolicy/beigebook.htm
+
+3. **Integrate Layer 2 into Main App**
+   ```python
+   # In backend/main.py, add:
+   from layer2_policy.backend.api import policy_router
+   app.include_router(policy_router, prefix="/api/policy", tags=["policy"])
+   ```
+
+4. **Create Layer 2 Frontend Component**
+   - PolicyCompare.vue for side-by-side paragraph display
 
 ---
 

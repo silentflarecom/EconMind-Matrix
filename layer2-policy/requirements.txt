@@ -1,18 +1,35 @@
 # Layer 2: Policy Module - Requirements
 
-# PDF Parsing
-marker-pdf>=0.1.0
+# ===== Core Dependencies =====
+fastapi>=0.100.0
+uvicorn>=0.23.0
+aiosqlite>=0.19.0
+python-multipart>=0.0.6
 
-# Semantic Similarity
+# ===== PDF Parsing =====
+# Marker is AI-powered PDF parser (includes OCR, table extraction)
+# Note: Requires PyTorch, may need GPU for best performance
+# marker-pdf>=0.1.0
+
+# Fallback PDF extraction (lighter, no AI)
+PyPDF2>=3.0.0
+
+# ===== Semantic Alignment =====
+# Sentence-BERT for multilingual semantic similarity
+# Note: Requires PyTorch
 sentence-transformers>=2.2.0
+
+# PyTorch (required for sentence-transformers and marker)
+# Install appropriate version for your system:
+# CPU only: pip install torch
+# CUDA: pip install torch --index-url https://download.pytorch.org/whl/cu118
 torch>=2.0.0
 
-# Topic Modeling (optional)
-bertopic>=0.15.0
+# ===== Text Processing =====
+numpy>=1.24.0
 
-# Text Processing
-nltk>=3.8.0
-jieba>=0.42.0
+# ===== Optional: Topic Modeling =====
+# bertopic>=0.15.0  # For advanced topic extraction
 
-# Database (shared with Layer 1)
-aiosqlite>=0.19.0
+# ===== Optional: Chinese Text Processing =====
+# jieba>=0.42.0  # Chinese word segmentation
