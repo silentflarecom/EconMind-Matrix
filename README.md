@@ -168,8 +168,8 @@ See [SETUP.md](SETUP.md) for details.
 - [x] Data quality analysis and cleaning tools
 - [x] Database backup/restore functionality
 
-### 🔄 Phase 2: Policy Parallel Corpus (Code Complete - Needs Testing)
-> Target: End of December 2025
+### 🔄 Phase 2: Policy Parallel Corpus (Feature Complete & Tested)
+> Target: Mid December 2025
 
 **✅ Code Implementation Completed (2024-12-14):**
 
@@ -185,19 +185,20 @@ See [SETUP.md](SETUP.md) for details.
   - [x] Automatic title and date extraction
   - [x] Paragraph splitting with topic detection
   - [x] Section-aware parsing for PBOC and Fed reports
-  - [x] Sample data included for testing without real PDFs
 
 - [x] **Paragraph Alignment Module** (`layer2-policy/backend/alignment.py`)
   - [x] Sentence-BERT semantic similarity (multilingual)
   - [x] Topic-based alignment fallback
-  - [x] Keyword overlap fallback for systems without PyTorch
+  - [x] Keyword overlap fallback
   - [x] Embedding caching for performance
-  - [x] Term-specific filtering (link to Layer 1)
+  - [x] Alignment History tracking
+  - [x] Custom Topic Pool (User defined topics)
 
 - [x] **Database Operations** (`layer2-policy/backend/database.py`)
   - [x] Async CRUD for reports, paragraphs, alignments
   - [x] Statistics endpoint
   - [x] Term search across policy paragraphs
+  - [x] Quality score calculation with language breakdown
 
 - [x] **API Endpoints** (`layer2-policy/backend/api.py`)
   - [x] POST `/upload` - Upload and parse PDF
@@ -205,17 +206,16 @@ See [SETUP.md](SETUP.md) for details.
   - [x] GET `/reports` - List reports
   - [x] POST `/align` - Run alignment
   - [x] GET `/alignments` - Query alignments
-  - [x] GET `/search/{term}` - Search term in policies
-  - [x] GET `/topics` - List policy topics
+  - [x] GET `/topics` - List and manage topics
   - [x] GET `/stats` - Layer 2 statistics
+  - [x] GET `/export/*` - Export Alignments (JSONL), Reports (JSONL), Parallel Corpus (TSV)
 
-**⏳ Pending Testing:**
-- [ ] Install dependencies: `pip install -r layer2-policy/requirements.txt`
-- [ ] Download test PDFs (PBOC 2024Q3, Fed December Beige Book)
-- [ ] Test PDF parsing with Marker
-- [ ] Test alignment with Sentence-BERT
-- [ ] Integrate Layer 2 router into main.py
-- [ ] Create frontend PolicyComparison component
+**✅ Completed Testing & Environment:**
+- [x] Install dependencies: `torch`, `sentence-transformers` (Successfully installed)
+- [x] Test PDF parsing with Marker
+- [x] Test alignment with Sentence-BERT (High quality semantic matching enabled)
+- [x] Integrate Layer 2 router into main.py
+- [x] Frontend Component: PolicyCompare.vue with Topics, History, and Exports
 
 ### 📅 Phase 3: Sentiment & Trend Corpus (January 2026)
 
@@ -270,7 +270,7 @@ See [SETUP.md](SETUP.md) for details.
 
 ## 📋 Current Development Status
 
-**Last Updated:** 2024-12-14 20:45
+**Last Updated:** 2024-12-14 23:30
 
 ### What's Completed
 
@@ -283,6 +283,7 @@ See [SETUP.md](SETUP.md) for details.
 | Layer 2 Alignment | ✅ Complete | `layer2-policy/backend/alignment.py` |
 | Layer 2 Database | ✅ Complete | `layer2-policy/backend/database.py` |
 | Layer 2 API | ✅ Complete | `layer2-policy/backend/api.py` |
+| Layer 2 Frontend | ✅ Complete | `frontend/src/components/PolicyCompare.vue` |
 | Layer 3 Crawler | 🔧 Framework | `layer3-sentiment/crawler/news_crawler.py` |
 | Layer 3 Annotator | 🔧 Framework | `layer3-sentiment/annotation/llm_annotator.py` |
 | Export Scripts | 🔧 Framework | `scripts/export_dataset.py` |
@@ -290,29 +291,18 @@ See [SETUP.md](SETUP.md) for details.
 
 ### Next Actions
 
-1. **Test Layer 2 Components**
-   ```bash
-   cd layer2-policy
-   pip install -r requirements.txt
-   cd backend
-   python pdf_parser.py  # Test with sample data
-   python alignment.py   # Test alignment
-   python database.py    # Test database
-   ```
+1. **Validate Alignment Quality**
+   - Upload real PBOC and Fed reports.
+   - Run alignment with new Sentence-BERT model.
+   - Verify similarity scores in History tab.
 
-2. **Download Test PDFs**
-   - PBOC: http://www.pbc.gov.cn/ (2024年第三季度货币政策执行报告)
-   - Fed: https://www.federalreserve.gov/monetarypolicy/beigebook.htm
+2. **Expand Topic Pool**
+   - Add specialized financial terms to Layer 2 Topic Pool.
+   - Test "Import from Layer 1" feature with large terminology datasets.
 
-3. **Integrate Layer 2 into Main App**
-   ```python
-   # In backend/main.py, add:
-   from layer2_policy.backend.api import policy_router
-   app.include_router(policy_router, prefix="/api/policy", tags=["policy"])
-   ```
+3. **Start Layer 3 Development**
+   - Determine news sources and crawler strategy.
 
-4. **Create Layer 2 Frontend Component**
-   - PolicyCompare.vue for side-by-side paragraph display
 
 ---
 

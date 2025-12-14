@@ -362,7 +362,18 @@ async def export_results(task_id: int, format: str = "json"):
     if not terms:
         raise HTTPException(status_code=404, detail="No completed terms found")
     
-    # Parse translations JSON for each term
+    # Helper function to clean text for export (normalize newlines)
+    def clean_text(text):
+        if not text:
+            return text
+        # Replace various newline formats with single space
+        import re
+        text = re.sub(r'[\r\n]+', ' ', text)
+        # Remove excessive spaces
+        text = re.sub(r' +', ' ', text)
+        return text.strip()
+    
+    # Parse translations JSON for each term and clean summaries
     for term in terms:
         if term.get('translations') and isinstance(term['translations'], str):
             try:
@@ -371,12 +382,18 @@ async def export_results(task_id: int, format: str = "json"):
                 term['translations'] = {}
         elif not term.get('translations'):
             term['translations'] = {}
+        
+        # Clean summaries in translations
+        for lang, data in term.get('translations', {}).items():
+            if data.get('summary'):
+                data['summary'] = clean_text(data['summary'])
     
     # Get task info for target languages
     task = await get_task_status(task_id)
     target_languages = ['en', 'zh']  # default
     if task and task.get('target_languages'):
         target_languages = task['target_languages'].split(',')
+
     
     if format == "json":
         # Standard JSON array - include all metadata

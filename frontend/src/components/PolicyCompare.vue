@@ -31,6 +31,12 @@ const alignmentThreshold = ref(0.5)
 const stats = ref(null)
 const topics = ref([])
 
+// History state
+const alignmentHistory = ref([])
+const historyLoading = ref(false)
+const historyPage = ref(1)
+const historyLimit = ref(20)
+
 // Load data on mount
 onMounted(async () => {
   await loadReports()
@@ -318,6 +324,24 @@ const exportData = (type, format) => {
   window.open(url, '_blank')
 }
 
+// Load alignment history
+const loadAlignmentHistory = async () => {
+  historyLoading.value = true
+  try {
+    const res = await axios.get(`${API_BASE}/alignments`, {
+      params: {
+        limit: 100
+      }
+    })
+    alignmentHistory.value = res.data.alignments || []
+  } catch (err) {
+    console.error('Failed to load alignment history:', err)
+    error.value = 'Failed to load history'
+  } finally {
+    historyLoading.value = false
+  }
+}
+
 // Computed
 const pbocReports = computed(() => reports.value.filter(r => r.source === 'pboc'))
 const fedReports = computed(() => reports.value.filter(r => r.source === 'fed'))
@@ -428,7 +452,13 @@ const getTopicColor = (topic) => {
         @click="activeTab = 'topics'"
         :class="['px-6 py-3 font-medium text-sm rounded-t-lg transition', activeTab === 'topics' ? 'bg-white text-emerald-600 border-t-2 border-emerald-500' : 'text-gray-500 hover:text-gray-700']"
       >
-        🏷️ Topics ({{ topics.length }})
+        🏷️ Topics ({{ customTopics.length }})
+      </button>
+      <button
+        @click="activeTab = 'history'; loadAlignmentHistory()"
+        :class="['px-6 py-3 font-medium text-sm rounded-t-lg transition', activeTab === 'history' ? 'bg-white text-emerald-600 border-t-2 border-emerald-500' : 'text-gray-500 hover:text-gray-700']"
+      >
+        📊 History ({{ stats?.total_alignments || 0 }})
       </button>
     </div>
 
@@ -784,6 +814,91 @@ const getTopicColor = (topic) => {
           >
             + {{ term }}
           </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- History Tab -->
+    <div v-if="activeTab === 'history'" class="bg-white rounded-xl shadow-md p-6 border border-gray-100">
+      <div class="flex justify-between items-center mb-4">
+        <h3 class="text-lg font-semibold text-gray-800">📊 Alignment History</h3>
+        <button
+          @click="loadAlignmentHistory"
+          class="px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-sm hover:bg-emerald-700 transition"
+        >
+          🔄 Refresh
+        </button>
+      </div>
+
+      <!-- Info Box -->
+      <div class="mb-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+        <p class="text-sm text-blue-800">
+          <strong>💡 Alignment History:</strong> All paragraph pairs that have been aligned across reports.
+          Use this to review, verify, or export alignment results for further analysis.
+        </p>
+      </div>
+
+      <!-- Loading State -->
+      <div v-if="historyLoading" class="text-center py-12">
+        <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto"></div>
+        <p class="text-gray-500 mt-4">Loading alignment history...</p>
+      </div>
+
+      <!-- Empty State -->
+      <div v-else-if="alignmentHistory.length === 0" class="text-center py-12 bg-gray-50 rounded-lg border border-dashed border-gray-300">
+        <p class="text-3xl mb-2">📭</p>
+        <p class="text-gray-500 text-sm">No alignments yet</p>
+        <p class="text-gray-400 text-xs mt-1">Upload reports and run alignment to see results here</p>
+      </div>
+
+      <!-- History Table -->
+      <div v-else class="overflow-x-auto">
+        <table class="w-full border border-gray-200 rounded-lg">
+          <thead class="bg-gray-50">
+            <tr>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Similarity</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Topic</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Method</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Source (PBOC)</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Target (Fed)</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-200">
+            <tr v-for="align in alignmentHistory" :key="align.id" class="hover:bg-gray-50 transition">
+              <td class="px-4 py-3 text-sm text-gray-600">{{ align.id }}</td>
+              <td class="px-4 py-3">
+                <span 
+                  :class="[
+                    'px-2 py-1 rounded-full text-xs font-medium',
+                    align.similarity_score > 0.7 ? 'bg-green-100 text-green-800' :
+                    align.similarity_score > 0.4 ? 'bg-yellow-100 text-yellow-800' :
+                    'bg-red-100 text-red-800'
+                  ]"
+                >
+                  {{ (align.similarity_score * 100).toFixed(1) }}%
+                </span>
+              </td>
+              <td class="px-4 py-3">
+                <span v-if="align.topic" class="px-2 py-1 bg-purple-100 text-purple-800 rounded text-xs">
+                  {{ align.topic }}
+                </span>
+                <span v-else class="text-gray-400 text-xs">-</span>
+              </td>
+              <td class="px-4 py-3 text-xs text-gray-500">{{ align.alignment_method }}</td>
+              <td class="px-4 py-3 text-sm text-gray-700 max-w-xs truncate">
+                {{ align.source_text?.substring(0, 100) }}...
+              </td>
+              <td class="px-4 py-3 text-sm text-gray-700 max-w-xs truncate">
+                {{ align.target_text?.substring(0, 100) }}...
+              </td>
+            </tr>
+          </tbody>
+        </table>
+
+        <!-- Total Count -->
+        <div class="mt-4 text-sm text-gray-500 text-center">
+          Showing {{ alignmentHistory.length }} alignment{{ alignmentHistory.length !== 1 ? 's' : '' }}
         </div>
       </div>
     </div>

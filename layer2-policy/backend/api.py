@@ -487,6 +487,15 @@ async def search_term_in_policy(
 
 # ==================== Export ====================
 
+def clean_export_text(text):
+    """Clean text for export by removing newlines and extra spaces."""
+    if not text:
+        return text
+    import re
+    text = re.sub(r'[\r\n]+', ' ', text)
+    text = re.sub(r' +', ' ', text)
+    return text.strip()
+
 @policy_router.get("/export/alignments")
 async def export_alignments(format: str = Query("jsonl", enum=["json", "jsonl"])):
     """Export all alignments in JSON or JSONL format."""
@@ -494,6 +503,13 @@ async def export_alignments(format: str = Query("jsonl", enum=["json", "jsonl"])
     from fastapi.responses import StreamingResponse
     
     alignments = await db.get_all_alignments()
+    
+    # Clean text in alignments
+    for a in alignments:
+        if a.source_text:
+            a.source_text = clean_export_text(a.source_text)
+        if a.target_text:
+            a.target_text = clean_export_text(a.target_text)
     
     if format == "json":
         content = json.dumps({
@@ -564,12 +580,19 @@ async def export_parallel_corpus(format: str = Query("jsonl", enum=["json", "jso
     
     alignments = await db.get_all_alignments()
     
+    # Clean text in alignments
+    for a in alignments:
+        if a.source_text:
+            a.source_text = clean_export_text(a.source_text)
+        if a.target_text:
+            a.target_text = clean_export_text(a.target_text)
+    
     if format == "tsv":
         def generate():
             yield "source_text\ttarget_text\tsimilarity\ttopic\n"
             for a in alignments:
-                source = (a.source_text or "").replace("\t", " ").replace("\n", " ")
-                target = (a.target_text or "").replace("\t", " ").replace("\n", " ")
+                source = (a.source_text or "").replace("\t", " ")
+                target = (a.target_text or "").replace("\t", " ")
                 yield f"{source}\t{target}\t{a.similarity_score:.3f}\t{a.topic or ''}\n"
         
         return StreamingResponse(
