@@ -1,0 +1,18 @@
+# Layer 2: Policy Module - Requirements
+
+# PDF Parsing
+marker-pdf>=0.1.0
+
+# Semantic Similarity
+sentence-transformers>=2.2.0
+torch>=2.0.0
+
+# Topic Modeling (optional)
+bertopic>=0.15.0
+
+# Text Processing
+nltk>=3.8.0
+jieba>=0.42.0
+
+# Database (shared with Layer 1)
+aiosqlite>=0.19.0
