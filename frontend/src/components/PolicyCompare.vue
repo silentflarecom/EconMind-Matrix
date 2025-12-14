@@ -66,6 +66,137 @@ const loadTopics = async () => {
   }
 }
 
+// User custom topics (stored locally + can be used for alignment filtering)
+const customTopics = ref([])
+const newSingleTerm = ref('')
+const newBatchTerms = ref('')
+const importFile = ref(null)
+
+// Add single term to topic pool
+const addSingleTerm = () => {
+  const term = newSingleTerm.value.trim()
+  if (!term) return
+  if (customTopics.value.some(t => t.term.toLowerCase() === term.toLowerCase())) {
+    error.value = 'Term already exists in pool'
+    return
+  }
+  customTopics.value.push({
+    term: term,
+    addedAt: new Date().toISOString(),
+    source: 'manual'
+  })
+  newSingleTerm.value = ''
+  saveCustomTopicsToStorage()
+}
+
+// Add batch terms
+const addBatchTerms = () => {
+  const terms = newBatchTerms.value
+    .split('\n')
+    .map(t => t.trim())
+    .filter(t => t.length > 0)
+  
+  if (terms.length === 0) return
+  
+  let added = 0
+  for (const term of terms) {
+    if (!customTopics.value.some(t => t.term.toLowerCase() === term.toLowerCase())) {
+      customTopics.value.push({
+        term: term,
+        addedAt: new Date().toISOString(),
+        source: 'batch'
+      })
+      added++
+    }
+  }
+  newBatchTerms.value = ''
+  saveCustomTopicsToStorage()
+  if (added > 0) {
+    alert(`Added ${added} new terms to topic pool`)
+  }
+}
+
+// Import from Layer 1 JSON file
+const handleImportFile = async (event) => {
+  const file = event.target.files[0]
+  if (!file) return
+  
+  try {
+    const text = await file.text()
+    let terms = []
+    
+    // Try JSONL format first
+    if (file.name.endsWith('.jsonl')) {
+      const lines = text.split('\n').filter(l => l.trim())
+      for (const line of lines) {
+        try {
+          const obj = JSON.parse(line)
+          if (obj.term) terms.push(obj.term)
+          else if (obj.en_term) terms.push(obj.en_term)
+        } catch (e) { /* skip invalid lines */ }
+      }
+    } else {
+      // Try JSON array or object
+      const data = JSON.parse(text)
+      if (Array.isArray(data)) {
+        terms = data.map(item => item.term || item.en_term || item).filter(t => typeof t === 'string')
+      } else if (data.terms) {
+        terms = data.terms
+      }
+    }
+    
+    let added = 0
+    for (const term of terms) {
+      if (term && !customTopics.value.some(t => t.term.toLowerCase() === term.toLowerCase())) {
+        customTopics.value.push({
+          term: term,
+          addedAt: new Date().toISOString(),
+          source: 'layer1-import'
+        })
+        added++
+      }
+    }
+    saveCustomTopicsToStorage()
+    alert(`Imported ${added} terms from ${file.name}`)
+    event.target.value = '' // Reset file input
+  } catch (err) {
+    error.value = 'Failed to parse import file. Ensure it is valid JSON or JSONL.'
+  }
+}
+
+// Remove term from pool
+const removeCustomTopic = (index) => {
+  customTopics.value.splice(index, 1)
+  saveCustomTopicsToStorage()
+}
+
+// Clear all custom topics
+const clearAllCustomTopics = () => {
+  if (!confirm('Remove all custom terms from pool?')) return
+  customTopics.value = []
+  saveCustomTopicsToStorage()
+}
+
+// Save to localStorage
+const saveCustomTopicsToStorage = () => {
+  localStorage.setItem('layer2_custom_topics', JSON.stringify(customTopics.value))
+}
+
+// Load from localStorage
+const loadCustomTopicsFromStorage = () => {
+  try {
+    const saved = localStorage.getItem('layer2_custom_topics')
+    if (saved) {
+      customTopics.value = JSON.parse(saved)
+    }
+  } catch (e) {
+    console.error('Failed to load custom topics:', e)
+  }
+}
+
+// Load saved topics on mount
+loadCustomTopicsFromStorage()
+
 // Upload text report
 const uploadTextReport = async () => {
   if (!uploadText.value.trim() || !uploadTitle.value.trim()) {
@@ -181,6 +312,12 @@ const deleteReport = async (reportId) => {
   }
 }
 
+// Export data
+const exportData = (type, format) => {
+  const url = `${API_BASE}/export/${type}?format=${format}`
+  window.open(url, '_blank')
+}
+
 // Computed
 const pbocReports = computed(() => reports.value.filter(r => r.source === 'pboc'))
 const fedReports = computed(() => reports.value.filter(r => r.source === 'fed'))
@@ -231,6 +368,39 @@ const getTopicColor = (topic) => {
       <div class="bg-white rounded-xl p-4 shadow-md border border-gray-100">
         <p class="text-3xl font-bold text-orange-600">{{ (stats.avg_similarity * 100).toFixed(1) }}%</p>
         <p class="text-sm text-gray-500">Avg Similarity</p>
+      </div>
+    </div>
+
+    <!-- Export Section -->
+    <div v-if="stats && stats.total_alignments > 0" class="bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl p-4 border border-blue-200">
+      <div class="flex items-center justify-between">
+        <div>
+          <h4 class="font-medium text-gray-800">📦 Export Layer 2 Data</h4>
+          <p class="text-sm text-gray-500">Download reports, alignments, or parallel corpus</p>
+        </div>
+        <div class="flex gap-2">
+          <button
+            @click="exportData('alignments', 'jsonl')"
+            class="px-3 py-1.5 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 transition"
+            title="Export alignments as JSONL"
+          >
+            📥 Alignments
+          </button>
+          <button
+            @click="exportData('reports', 'jsonl')"
+            class="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition"
+            title="Export reports with paragraphs"
+          >
+            📄 Reports
+          </button>
+          <button
+            @click="exportData('parallel-corpus', 'tsv')"
+            class="px-3 py-1.5 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition"
+            title="Export as parallel corpus (TSV)"
+          >
+            🔗 Parallel TSV
+          </button>
+        </div>
       </div>
     </div>
 
@@ -409,6 +579,21 @@ const getTopicColor = (topic) => {
     <div v-if="activeTab === 'align'" class="bg-white rounded-xl shadow-md p-6 border border-gray-100">
       <h3 class="text-lg font-semibold text-gray-800 mb-4">Align Reports</h3>
       
+      <!-- Example/Instructions Box -->
+      <div class="mb-6 p-4 bg-emerald-50 rounded-lg border border-emerald-200">
+        <p class="text-sm font-medium text-emerald-800 mb-2">💡 How to use:</p>
+        <ol class="text-sm text-gray-700 list-decimal list-inside space-y-1">
+          <li><strong>Upload at least one PBOC report and one Fed report</strong> from the Upload tab</li>
+          <li><strong>Select Source (PBOC)</strong> - e.g., "2024Q3 PBOC Report"</li>
+          <li><strong>Select Target (Fed)</strong> - e.g., "December 2024 Beige Book"</li>
+          <li><strong>Adjust Threshold</strong> - Lower = more matches, Higher = stricter matching (0.3-0.5 recommended)</li>
+          <li><strong>Run Alignment</strong> to find matching paragraphs on similar topics</li>
+        </ol>
+        <p class="text-xs text-emerald-600 mt-2">
+          Example: Compare how PBOC and Fed discuss "inflation" - the system will find paragraphs about price stability from both reports.
+        </p>
+      </div>
+      
       <div class="grid grid-cols-3 gap-4 mb-6">
         <!-- Source Selection -->
         <div>
@@ -471,19 +656,134 @@ const getTopicColor = (topic) => {
 
     <!-- Topics Tab -->
     <div v-if="activeTab === 'topics'" class="bg-white rounded-xl shadow-md p-6 border border-gray-100">
-      <h3 class="text-lg font-semibold text-gray-800 mb-4">Policy Topics (Auto-detected)</h3>
-      <div class="grid grid-cols-2 gap-4">
-        <div v-for="topic in topics" :key="topic.key" class="p-4 rounded-lg border border-gray-200">
-          <div class="flex items-center gap-2 mb-2">
-            <span :class="['px-2 py-1 rounded text-xs font-medium', getTopicColor(topic.key)]">
-              {{ topic.key }}
-            </span>
+      <h3 class="text-lg font-semibold text-gray-800 mb-4">🏷️ Topic Pool</h3>
+      
+      <!-- Info Box -->
+      <div class="mb-6 p-4 bg-emerald-50 rounded-lg border border-emerald-200">
+        <p class="text-sm font-medium text-emerald-800 mb-2">💡 How topics work:</p>
+        <ul class="text-xs text-emerald-700 list-disc list-inside space-y-1">
+          <li>Add terms to the pool to improve paragraph matching during alignment</li>
+          <li>Import terms directly from Layer 1 exports (JSON/JSONL)</li>
+          <li>Topics are saved locally in your browser</li>
+        </ul>
+      </div>
+
+      <!-- Add Custom Term Section -->
+      <div class="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+        <h4 class="font-medium text-gray-800 mb-3">➕ Add Terms to Pool</h4>
+        
+        <div class="grid grid-cols-2 gap-4 mb-4">
+          <!-- Single Term -->
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Single Term</label>
+            <div class="flex gap-2">
+              <input
+                v-model="newSingleTerm"
+                @keyup.enter="addSingleTerm"
+                type="text"
+                placeholder="e.g., Quantitative easing"
+                class="flex-1 px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
+              />
+              <button 
+                @click="addSingleTerm"
+                class="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm hover:bg-emerald-700 transition"
+              >
+                Add
+              </button>
+            </div>
           </div>
-          <p class="text-sm text-gray-600 mb-2">{{ topic.description }}</p>
-          <div class="text-xs text-gray-500">
-            <p><strong>EN:</strong> {{ topic.en_keywords?.slice(0, 5).join(', ') }}</p>
-            <p><strong>ZH:</strong> {{ topic.zh_keywords?.slice(0, 5).join(', ') }}</p>
+          
+          <!-- Import from Layer 1 -->
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Import from Layer 1</label>
+            <div class="flex gap-2">
+              <input
+                type="file"
+                @change="handleImportFile"
+                accept=".json,.jsonl"
+                class="flex-1 text-sm text-gray-500 file:mr-2 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-sm file:bg-blue-50 file:text-blue-700 file:cursor-pointer"
+              />
+            </div>
+            <p class="text-xs text-gray-500 mt-1">Accepts JSON or JSONL format</p>
           </div>
+        </div>
+
+        <!-- Batch Add -->
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Batch Add (one per line)</label>
+          <div class="flex gap-2">
+            <textarea
+              v-model="newBatchTerms"
+              rows="3"
+              placeholder="Inflation&#10;GDP growth&#10;Interest rate&#10;Money supply"
+              class="flex-1 px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
+            ></textarea>
+            <button 
+              @click="addBatchTerms"
+              class="px-4 py-2 bg-gray-600 text-white rounded-lg text-sm hover:bg-gray-700 transition h-fit"
+            >
+              Batch Add
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Topic Pool Display -->
+      <div class="mb-4 flex justify-between items-center">
+        <h4 class="font-medium text-gray-800">� Your Topic Pool ({{ customTopics.length }})</h4>
+        <button 
+          v-if="customTopics.length > 0"
+          @click="clearAllCustomTopics"
+          class="text-xs text-red-600 hover:text-red-700"
+        >
+          Clear All
+        </button>
+      </div>
+
+      <!-- Empty State -->
+      <div v-if="customTopics.length === 0" class="text-center py-8 bg-gray-50 rounded-lg border border-dashed border-gray-300">
+        <p class="text-3xl mb-2">📭</p>
+        <p class="text-gray-500 text-sm">No topics in pool yet</p>
+        <p class="text-gray-400 text-xs mt-1">Add terms above or import from Layer 1</p>
+      </div>
+
+      <!-- Topic Pool Grid -->
+      <div v-else class="flex flex-wrap gap-2 max-h-64 overflow-y-auto p-2 bg-gray-50 rounded-lg border border-gray-200">
+        <div 
+          v-for="(topic, index) in customTopics" 
+          :key="index"
+          class="group flex items-center gap-1 px-3 py-1.5 bg-white border border-gray-200 rounded-full text-sm hover:border-emerald-400 transition"
+        >
+          <span class="text-gray-700">{{ topic.term }}</span>
+          <span 
+            v-if="topic.source === 'layer1-import'" 
+            class="text-xs text-blue-500"
+            title="Imported from Layer 1"
+          >
+            📁
+          </span>
+          <button 
+            @click="removeCustomTopic(index)"
+            class="ml-1 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition"
+          >
+            ×
+          </button>
+        </div>
+      </div>
+
+      <!-- Quick Add Examples -->
+      <div class="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
+        <h4 class="font-medium text-blue-800 mb-2">� Quick Add Examples</h4>
+        <p class="text-xs text-blue-700 mb-2">Click to add common economic terms:</p>
+        <div class="flex flex-wrap gap-2">
+          <button 
+            v-for="term in ['Inflation', 'GDP', 'Interest rate', 'Monetary policy', 'Exchange rate', 'Unemployment', 'Fiscal policy', 'Trade balance']"
+            :key="term"
+            @click="newSingleTerm = term; addSingleTerm()"
+            class="px-2 py-1 bg-white text-xs text-blue-700 rounded border border-blue-200 hover:bg-blue-100 transition"
+          >
+            + {{ term }}
+          </button>
         </div>
       </div>
     </div>

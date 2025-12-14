@@ -4,11 +4,13 @@ import axios from 'axios'
 import BatchImport from './components/BatchImport.vue'
 import ProgressMonitor from './components/ProgressMonitor.vue'
 import ResultsTable from './components/ResultsTable.vue'
-import TaskManager from './components/TaskManager.vue'
 import PolicyCompare from './components/PolicyCompare.vue'
 
-// Active view: 'single', 'batch', 'manage', or 'policy'
-const activeView = ref('single')
+// Active view: 'layer1', 'layer2', or 'system'
+const activeView = ref('layer1')
+
+// Layer 1 sub-tabs: 'search', 'batch', 'results', 'tasks'
+const layer1Tab = ref('search')
 
 // Single search state
 const term = ref('')
@@ -68,6 +70,7 @@ const handleTaskCreated = async (taskData) => {
   try {
     await axios.post(`http://localhost:8000/api/batch/${taskData.task_id}/start`)
     showProgress.value = true
+    layer1Tab.value = 'progress'
   } catch (err) {
     console.error('Error starting task:', err)
   }
@@ -90,21 +93,123 @@ const handleRetry = async (taskId) => {
 const viewResults = () => {
   showProgress.value = false
   showResults.value = true
+  layer1Tab.value = 'results'
 }
 
 const closeProgress = () => {
   showProgress.value = false
+  layer1Tab.value = 'batch'
 }
 
 const closeResults = () => {
   showResults.value = false
+  layer1Tab.value = 'batch'
 }
 
 // Task Manager functions
 const handleViewTask = (taskId) => {
   currentTaskId.value = taskId
-  activeView.value = 'batch'
   showResults.value = true
+  layer1Tab.value = 'results'
+}
+
+// System state
+const systemStats = ref(null)
+const userAgent = ref('')
+const loadingSettings = ref(false)
+const savingSettings = ref(false)
+const settingsSuccess = ref(false)
+const tasks = ref([])
+const deleteConfirm = ref(null)
+const resetConfirm = ref(false)
+const resetting = ref(false)
+
+const loadSystemData = async () => {
+  try {
+    const [statsRes, tasksRes] = await Promise.all([
+      axios.get('http://localhost:8000/api/corpus/statistics'),
+      axios.get('http://localhost:8000/api/batch/tasks')
+    ])
+    systemStats.value = statsRes.data
+    tasks.value = tasksRes.data
+  } catch (err) {
+    console.error('Failed to load system data:', err)
+  }
+  
+  try {
+    const settingsRes = await axios.get('http://localhost:8000/api/system/settings/user_agent')
+    userAgent.value = settingsRes.data.value
+  } catch (err) {
+    console.warn('Failed to load user agent:', err)
+  }
+}
+
+const saveUserAgent = async () => {
+  savingSettings.value = true
+  settingsSuccess.value = false
+  try {
+    await axios.post('http://localhost:8000/api/system/settings', {
+      key: 'user_agent',
+      value: userAgent.value
+    })
+    settingsSuccess.value = true
+    setTimeout(() => { settingsSuccess.value = false }, 3000)
+  } catch (err) {
+    error.value = 'Failed to save settings'
+  } finally {
+    savingSettings.value = false
+  }
+}
+
+const downloadBackup = () => {
+  window.open('http://localhost:8000/api/system/backup', '_blank')
+}
+
+const deleteTask = async (taskId) => {
+  try {
+    await axios.delete(`http://localhost:8000/api/batch/${taskId}`)
+    deleteConfirm.value = null
+    await loadSystemData()
+  } catch (err) {
+    error.value = err.response?.data?.detail || 'Failed to delete task'
+  }
+}
+
+const resetAllData = async () => {
+  resetting.value = true
+  try {
+    await axios.post('http://localhost:8000/api/system/reset?confirm=true')
+    resetConfirm.value = false
+    await loadSystemData()
+  } catch (err) {
+    error.value = err.response?.data?.detail || 'Failed to reset database'
+  } finally {
+    resetting.value = false
+  }
+}
+
+const formatDate = (dateStr) => {
+  if (!dateStr) return '-'
+  return new Date(dateStr).toLocaleString()
+}
+
+const formatBytes = (bytes) => {
+  if (!bytes) return '0 B'
+  const k = 1024
+  const sizes = ['B', 'KB', 'MB', 'GB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+}
+
+const getStatusColor = (status) => {
+  const colors = {
+    'pending': 'bg-yellow-100 text-yellow-800',
+    'running': 'bg-blue-100 text-blue-800',
+    'completed': 'bg-green-100 text-green-800',
+    'failed': 'bg-red-100 text-red-800',
+    'cancelled': 'bg-gray-100 text-gray-800'
+  }
+  return colors[status] || 'bg-gray-100 text-gray-800'
 }
 </script>
 
@@ -115,106 +220,145 @@ const handleViewTask = (taskId) => {
       <!-- Header -->
       <div class="text-center">
         <h1 class="text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-purple-600 tracking-tight">
-          Term Corpus Generator
+          EconMind Matrix
         </h1>
         <p class="mt-3 text-lg text-gray-600">
-          Instantly fetch bilingual definitions from Wikipedia
+          Multi-Granularity Bilingual Economic Corpus Platform
         </p>
       </div>
 
-      <!-- View Switcher -->
-      <div class="flex justify-center gap-3">
+      <!-- Main Navigation -->
+      <div class="flex justify-center gap-3 flex-wrap">
         <button
-          @click="activeView = 'single'"
+          @click="activeView = 'layer1'"
           :class="[
             'px-8 py-3 rounded-xl font-semibold text-lg transition-all shadow-md',
-            activeView === 'single'
-              ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-blue-200'
+            activeView === 'layer1'
+              ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-blue-200'
               : 'bg-white text-gray-600 hover:bg-gray-50'
           ]"
         >
-          🔍 Single Search
+          📚 Layer 1: Terminology
         </button>
         <button
-          @click="activeView = 'batch'"
+          @click="activeView = 'layer2'"
           :class="[
             'px-8 py-3 rounded-xl font-semibold text-lg transition-all shadow-md',
-            activeView === 'batch'
-              ? 'bg-gradient-to-r from-purple-600 to-purple-700 text-white shadow-purple-200'
-              : 'bg-white text-gray-600 hover:bg-gray-50'
-          ]"
-        >
-          📚 Batch Import
-        </button>
-        <button
-          @click="activeView = 'manage'"
-          :class="[
-            'px-8 py-3 rounded-xl font-semibold text-lg transition-all shadow-md',
-            activeView === 'manage'
-              ? 'bg-gradient-to-r from-gray-700 to-gray-800 text-white shadow-gray-300'
-              : 'bg-white text-gray-600 hover:bg-gray-50'
-          ]"
-        >
-          ⚙️ Manage
-        </button>
-        <button
-          @click="activeView = 'policy'"
-          :class="[
-            'px-8 py-3 rounded-xl font-semibold text-lg transition-all shadow-md',
-            activeView === 'policy'
+            activeView === 'layer2'
               ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-emerald-200'
               : 'bg-white text-gray-600 hover:bg-gray-50'
           ]"
         >
-          📊 Policy Corpus
+          📊 Layer 2: Policy Corpus
+        </button>
+        <button
+          @click="activeView = 'system'; loadSystemData()"
+          :class="[
+            'px-8 py-3 rounded-xl font-semibold text-lg transition-all shadow-md',
+            activeView === 'system'
+              ? 'bg-gradient-to-r from-gray-700 to-gray-800 text-white shadow-gray-300'
+              : 'bg-white text-gray-600 hover:bg-gray-50'
+          ]"
+        >
+          ⚙️ System
         </button>
       </div>
 
-      <!-- Single Search View -->
-      <div v-if="activeView === 'single'" class="space-y-8">
-        <!-- Search Box -->
-        <div class="mt-8 flex gap-2">
-          <div class="relative flex-grow">
-            <input 
-              v-model="term" 
-              @keyup="handleKeyup"
-              type="text" 
-              class="block w-full rounded-xl border-gray-300 shadow-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-lg pl-4 py-4 border outline-none transition-all duration-200" 
-              placeholder="Enter a term (e.g., Inflation)" 
-            />
-          </div>
-          <button 
-            @click="search" 
-            :disabled="loading"
-            class="inline-flex items-center px-8 py-4 border border-transparent text-base font-medium rounded-xl shadow-md text-white bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition"
+      <!-- ==================== LAYER 1: TERMINOLOGY ==================== -->
+      <div v-if="activeView === 'layer1'" class="space-y-6">
+        
+        <!-- Layer 1 Header -->
+        <div class="bg-gradient-to-r from-blue-600 to-purple-600 rounded-2xl p-6 text-white shadow-lg">
+          <h2 class="text-2xl font-bold">📚 Layer 1: Terminology Knowledge Base</h2>
+          <p class="text-blue-100 mt-1">Search and batch import economic terms from Wikipedia in 20+ languages</p>
+        </div>
+
+        <!-- Layer 1 Sub-tabs -->
+        <div class="flex gap-2 border-b border-gray-200 flex-wrap">
+          <button
+            @click="layer1Tab = 'search'"
+            :class="['px-6 py-3 font-medium text-sm rounded-t-lg transition', layer1Tab === 'search' ? 'bg-white text-blue-600 border-t-2 border-blue-500' : 'text-gray-500 hover:text-gray-700']"
           >
-            <span v-if="loading" class="animate-spin mr-2">⟳</span>
-            Search
+            🔍 Single Search
+          </button>
+          <button
+            @click="layer1Tab = 'batch'"
+            :class="['px-6 py-3 font-medium text-sm rounded-t-lg transition', layer1Tab === 'batch' ? 'bg-white text-purple-600 border-t-2 border-purple-500' : 'text-gray-500 hover:text-gray-700']"
+          >
+            📥 Batch Import
+          </button>
+          <button
+            @click="layer1Tab = 'tasks'; loadSystemData()"
+            :class="['px-6 py-3 font-medium text-sm rounded-t-lg transition', layer1Tab === 'tasks' ? 'bg-white text-gray-600 border-t-2 border-gray-500' : 'text-gray-500 hover:text-gray-700']"
+          >
+            📋 Task History
+          </button>
+          <button
+            @click="layer1Tab = 'settings'; loadSystemData()"
+            :class="['px-6 py-3 font-medium text-sm rounded-t-lg transition', layer1Tab === 'settings' ? 'bg-white text-yellow-600 border-t-2 border-yellow-500' : 'text-gray-500 hover:text-gray-700']"
+          >
+            🔧 Settings
+          </button>
+          <button
+            v-if="showProgress && currentTaskId"
+            @click="layer1Tab = 'progress'"
+            :class="['px-6 py-3 font-medium text-sm rounded-t-lg transition', layer1Tab === 'progress' ? 'bg-white text-green-600 border-t-2 border-green-500' : 'text-gray-500 hover:text-gray-700']"
+          >
+            ⏳ Progress
+          </button>
+          <button
+            v-if="showResults && currentTaskId"
+            @click="layer1Tab = 'results'"
+            :class="['px-6 py-3 font-medium text-sm rounded-t-lg transition', layer1Tab === 'results' ? 'bg-white text-orange-600 border-t-2 border-orange-500' : 'text-gray-500 hover:text-gray-700']"
+          >
+            📋 Results
           </button>
         </div>
 
-        <!-- Error Message -->
-        <div v-if="error" class="rounded-xl bg-red-50 p-4 border border-red-200 animate-fade-in-down shadow-md">
-          <div class="flex">
-            <div class="ml-3">
-              <h3 class="text-sm font-medium text-red-800">Error</h3>
-              <div class="mt-2 text-sm text-red-700">
-                <p>{{ error }}</p>
-              </div>
+        <!-- Single Search -->
+        <div v-if="layer1Tab === 'search'" class="bg-white rounded-xl shadow-md p-6 border border-gray-100">
+          <h3 class="text-lg font-semibold text-gray-800 mb-4">Single Term Search</h3>
+          
+          <!-- Example Box -->
+          <div class="mb-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+            <p class="text-sm font-medium text-blue-800 mb-2">💡 Examples to try:</p>
+            <div class="flex flex-wrap gap-2">
+              <button @click="term = 'Inflation'" class="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm hover:bg-blue-200 transition">Inflation</button>
+              <button @click="term = 'GDP'" class="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm hover:bg-blue-200 transition">GDP</button>
+              <button @click="term = 'Monetary policy'" class="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm hover:bg-blue-200 transition">Monetary policy</button>
+              <button @click="term = 'Interest rate'" class="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm hover:bg-blue-200 transition">Interest rate</button>
+              <button @click="term = 'Exchange rate'" class="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm hover:bg-blue-200 transition">Exchange rate</button>
             </div>
           </div>
-        </div>
 
-        <!-- Results Area -->
-        <transition 
-          enter-active-class="transition ease-out duration-300"
-          enter-from-class="transform opacity-0 translate-y-4" 
-          enter-to-class="transform opacity-100 translate-y-0"
-          leave-active-class="transition ease-in duration-200"
-          leave-from-class="transform opacity-100 translate-y-0"
-          leave-to-class="transform opacity-0 translate-y-4"
-        >
-          <div v-if="result" class="bg-white shadow-xl rounded-2xl overflow-hidden border border-gray-100">
+          <!-- Search Box -->
+          <div class="flex gap-2">
+            <div class="relative flex-grow">
+              <input 
+                v-model="term" 
+                @keyup="handleKeyup"
+                type="text" 
+                class="block w-full rounded-xl border-gray-300 shadow-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-lg pl-4 py-4 border outline-none transition-all duration-200" 
+                placeholder="Enter a term (e.g., Inflation)" 
+              />
+            </div>
+            <button 
+              @click="search" 
+              :disabled="loading"
+              class="inline-flex items-center px-8 py-4 border border-transparent text-base font-medium rounded-xl shadow-md text-white bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition"
+            >
+              <span v-if="loading" class="animate-spin mr-2">⟳</span>
+              Search
+            </button>
+          </div>
+
+          <!-- Error Message -->
+          <div v-if="error" class="mt-4 rounded-xl bg-red-50 p-4 border border-red-200">
+            <p class="text-red-700">{{ error }}</p>
+          </div>
+
+          <!-- Results Area -->
+          <div v-if="result" class="mt-6 bg-gray-50 shadow-xl rounded-2xl overflow-hidden border border-gray-100">
             <div class="px-6 py-4 flex justify-between items-center bg-gradient-to-r from-gray-50 to-blue-50 border-b border-gray-100">
               <h3 class="text-lg leading-6 font-medium text-gray-900">
                 Results for: <span class="font-bold text-blue-600">{{ result.term }}</span>
@@ -231,12 +375,10 @@ const handleViewTask = (taskId) => {
               <!-- English Section -->
               <div class="p-6">
                 <div class="flex items-center justify-between mb-4">
-                  <h4 class="text-lg font-bold text-gray-800 flex items-center">
-                    🇺🇸 English
-                  </h4>
+                  <h4 class="text-lg font-bold text-gray-800">🇺🇸 English</h4>
                   <a :href="result.en_url" target="_blank" class="text-sm text-blue-500 hover:text-blue-700 font-medium transition">Wikipedia →</a>
                 </div>
-                <p class="text-gray-600 leading-relaxed text-sm h-80 overflow-y-auto pr-2 custom-scrollbar">
+                <p class="text-gray-600 leading-relaxed text-sm h-64 overflow-y-auto pr-2 custom-scrollbar">
                   {{ result.en_summary }}
                 </p>
               </div>
@@ -244,29 +386,68 @@ const handleViewTask = (taskId) => {
               <!-- Chinese Section -->
               <div class="p-6 bg-slate-50/50">
                 <div class="flex items-center justify-between mb-4">
-                  <h4 class="text-lg font-bold text-gray-800 flex items-center">
-                    🇨🇳 Chinese
-                  </h4>
+                  <h4 class="text-lg font-bold text-gray-800">🇨🇳 Chinese</h4>
                   <a v-if="result.zh_url" :href="result.zh_url" target="_blank" class="text-sm text-blue-500 hover:text-blue-700 font-medium transition">Wikipedia →</a>
                 </div>
                 <div v-if="result.zh_url">
-                  <p class="text-gray-600 leading-relaxed text-sm h-80 overflow-y-auto pr-2 custom-scrollbar">
+                  <p class="text-gray-600 leading-relaxed text-sm h-64 overflow-y-auto pr-2 custom-scrollbar">
                     {{ result.zh_summary }}
                   </p>
                 </div>
-                <div v-else class="flex flex-col items-center justify-center h-80 text-gray-400">
+                <div v-else class="flex flex-col items-center justify-center h-64 text-gray-400">
                   <span>No Chinese translation found.</span>
                 </div>
               </div>
             </div>
           </div>
-        </transition>
-      </div>
+        </div>
 
-      <!-- Batch Import View -->
-      <div v-if="activeView === 'batch'" class="space-y-6">
-        <!-- Progress Monitor (if task is running) -->
-        <div v-if="showProgress && currentTaskId">
+        <!-- Batch Import -->
+        <div v-if="layer1Tab === 'batch'" class="space-y-6">
+          <!-- Example Box -->
+          <div class="bg-purple-50 rounded-xl p-6 border border-purple-200">
+            <p class="text-sm font-medium text-purple-800 mb-3">💡 Batch Import Examples:</p>
+            <div class="grid grid-cols-2 gap-4 text-sm text-gray-700">
+              <div>
+                <p class="font-medium">Macroeconomics Terms:</p>
+                <code class="text-xs bg-white px-2 py-1 rounded block mt-1">GDP, Inflation, Unemployment, Fiscal policy, Trade deficit</code>
+              </div>
+              <div>
+                <p class="font-medium">Financial Markets:</p>
+                <code class="text-xs bg-white px-2 py-1 rounded block mt-1">Stock market, Bond, Derivatives, Hedge fund, Securities</code>
+              </div>
+            </div>
+          </div>
+          
+          <BatchImport @task-created="handleTaskCreated" />
+          
+          <!-- Quick Access to Current Task -->
+          <div v-if="currentTaskId && !showProgress && !showResults" class="bg-blue-50 border border-blue-200 rounded-xl p-4">
+            <div class="flex justify-between items-center">
+              <div>
+                <p class="text-sm font-medium text-blue-900">Recent Task #{{ currentTaskId }}</p>
+                <p class="text-xs text-blue-600 mt-1">Click to view progress or results</p>
+              </div>
+              <div class="flex gap-2">
+                <button
+                  @click="showProgress = true; layer1Tab = 'progress'"
+                  class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition"
+                >
+                  View Progress
+                </button>
+                <button
+                  @click="showResults = true; layer1Tab = 'results'"
+                  class="px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 transition"
+                >
+                  View Results
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Progress Monitor -->
+        <div v-if="layer1Tab === 'progress' && showProgress && currentTaskId">
           <ProgressMonitor 
             :taskId="currentTaskId" 
             @task-completed="viewResults"
@@ -274,8 +455,8 @@ const handleViewTask = (taskId) => {
           />
         </div>
 
-        <!-- Results Table (if viewing results) -->
-        <div v-if="showResults && currentTaskId">
+        <!-- Results Table -->
+        <div v-if="layer1Tab === 'results' && showResults && currentTaskId">
           <ResultsTable 
             :taskId="currentTaskId" 
             @close="closeResults"
@@ -283,44 +464,185 @@ const handleViewTask = (taskId) => {
           />
         </div>
 
-        <!-- Batch Import Component (always visible when not showing progress/results) -->
-        <div v-if="!showProgress && !showResults">
-          <BatchImport @task-created="handleTaskCreated" />
+        <!-- Task History -->
+        <div v-if="layer1Tab === 'tasks'" class="bg-white rounded-xl shadow-md p-6 border border-gray-100">
+          <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-semibold text-gray-800">Task History</h3>
+            <button @click="loadSystemData" class="text-sm text-blue-600 hover:underline">Refresh</button>
+          </div>
+          
+          <div v-if="tasks.length === 0" class="text-center py-12 text-gray-500">
+            <p class="text-5xl mb-4">📭</p>
+            <p>No tasks yet. Go to "Batch Import" to create one.</p>
+          </div>
+          
+          <div v-else class="divide-y divide-gray-100">
+            <div v-for="task in tasks" :key="task.id" class="py-4 flex justify-between items-center">
+              <div class="flex items-center gap-3">
+                <span class="font-bold text-gray-600">#{{ task.id }}</span>
+                <span :class="['px-2 py-1 rounded-full text-xs font-medium', getStatusColor(task.status)]">{{ task.status }}</span>
+                <span class="text-sm text-gray-500">{{ task.completed_terms }}/{{ task.total_terms }} terms</span>
+              </div>
+              <div class="flex gap-2">
+                <button @click="handleViewTask(task.id)" class="px-3 py-1 bg-blue-100 text-blue-700 rounded text-sm hover:bg-blue-200">View Results</button>
+                <button @click="deleteConfirm = task.id" class="px-3 py-1 bg-red-100 text-red-700 rounded text-sm hover:bg-red-200">Delete</button>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Delete Confirmation -->
+          <div v-if="deleteConfirm" class="mt-4 p-4 bg-red-50 rounded-lg border border-red-200">
+            <p class="text-sm text-red-700 mb-2">Are you sure you want to delete Task #{{ deleteConfirm }}?</p>
+            <div class="flex gap-2">
+              <button @click="deleteTask(deleteConfirm)" class="px-3 py-1 bg-red-600 text-white rounded text-sm hover:bg-red-700">Yes, Delete</button>
+              <button @click="deleteConfirm = null" class="px-3 py-1 bg-gray-200 text-gray-700 rounded text-sm hover:bg-gray-300">Cancel</button>
+            </div>
+          </div>
         </div>
 
-        <!-- Quick Access to Results (if task exists) -->
-        <div v-if="currentTaskId && !showProgress && !showResults" class="bg-blue-50 border border-blue-200 rounded-xl p-4">
-          <div class="flex justify-between items-center">
-            <div>
-              <p class="text-sm font-medium text-blue-900">Recent Task #{{ currentTaskId }}</p>
-              <p class="text-xs text-blue-600 mt-1">Click to view progress or results</p>
+        <!-- Settings -->
+        <div v-if="layer1Tab === 'settings'" class="bg-white rounded-xl shadow-md p-6 border border-gray-100">
+          <h3 class="text-lg font-semibold text-gray-800 mb-4">🔧 Layer 1 Settings</h3>
+          
+          <!-- User Agent Configuration -->
+          <div class="mb-6">
+            <h4 class="font-medium text-gray-700 mb-2">Wikipedia User Agent</h4>
+            <p class="text-sm text-gray-500 mb-3">Required for Wikipedia API crawling. Must include project name and contact info.</p>
+            
+            <!-- Example Box -->
+            <div class="mb-4 p-4 bg-yellow-50 rounded-lg border border-yellow-200">
+              <p class="text-sm font-medium text-yellow-800 mb-2">⚠️ Required format: ProjectName/Version (Contact)</p>
+              <div class="space-y-1 text-xs text-yellow-700">
+                <p>Example: <code class="bg-white px-2 py-0.5 rounded">MyResearchBot/1.0 (mailto:me@university.edu)</code></p>
+                <p>Example: <code class="bg-white px-2 py-0.5 rounded">EconCorpus/2.0 (https://github.com/user/project)</code></p>
+              </div>
             </div>
-            <div class="flex gap-2">
+
+            <div class="flex gap-4">
+              <input
+                v-model="userAgent"
+                type="text"
+                placeholder="e.g. MyBot/1.0 (mailto:me@example.com)"
+                class="flex-1 px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                :disabled="savingSettings"
+              />
               <button
-                @click="showProgress = true"
-                class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition"
+                @click="saveUserAgent"
+                :disabled="savingSettings"
+                class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition"
               >
-                View Progress
+                {{ savingSettings ? 'Saving...' : '💾 Save' }}
               </button>
-              <button
-                @click="showResults = true"
-                class="px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 transition"
-              >
-                View Results
-              </button>
+            </div>
+            <p v-if="settingsSuccess" class="mt-2 text-green-600 text-sm font-medium">✓ Settings saved!</p>
+          </div>
+
+          <!-- Statistics -->
+          <div v-if="systemStats" class="mt-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+            <h4 class="font-medium text-gray-700 mb-3">📊 Layer 1 Statistics</h4>
+            <div class="grid grid-cols-4 gap-4 text-center">
+              <div>
+                <p class="text-2xl font-bold text-blue-600">{{ systemStats.total_tasks }}</p>
+                <p class="text-xs text-gray-500">Tasks</p>
+              </div>
+              <div>
+                <p class="text-2xl font-bold text-green-600">{{ systemStats.completed_terms }}</p>
+                <p class="text-xs text-gray-500">Terms</p>
+              </div>
+              <div>
+                <p class="text-2xl font-bold text-purple-600">{{ systemStats.bilingual_pairs }}</p>
+                <p class="text-xs text-gray-500">Bilingual</p>
+              </div>
+              <div>
+                <p class="text-2xl font-bold text-gray-600">{{ formatBytes(systemStats.db_size_bytes) }}</p>
+                <p class="text-xs text-gray-500">DB Size</p>
+              </div>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- Manage View -->
-      <div v-if="activeView === 'manage'" class="space-y-6">
-        <TaskManager @view-task="handleViewTask" />
+      <!-- ==================== LAYER 2: POLICY CORPUS ==================== -->
+      <div v-if="activeView === 'layer2'" class="space-y-6">
+        <PolicyCompare />
       </div>
 
-      <!-- Policy View (Layer 2) -->
-      <div v-if="activeView === 'policy'" class="space-y-6">
-        <PolicyCompare />
+      <!-- ==================== SYSTEM ==================== -->
+      <div v-if="activeView === 'system'" class="space-y-6">
+        
+        <!-- System Header -->
+        <div class="bg-gradient-to-r from-gray-700 to-gray-800 rounded-2xl p-6 text-white shadow-lg">
+          <h2 class="text-2xl font-bold">⚙️ Global Settings</h2>
+          <p class="text-gray-300 mt-1">Database backup, restore, and global configuration</p>
+        </div>
+
+        <!-- Statistics -->
+        <div v-if="systemStats" class="bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl shadow-lg p-6 text-white">
+          <h3 class="text-lg font-bold mb-4">📊 Corpus Statistics (All Layers)</h3>
+          <div class="grid grid-cols-4 gap-4">
+            <div class="bg-white/20 backdrop-blur rounded-lg p-4">
+              <p class="text-sm text-white/80">Layer 1 Tasks</p>
+              <p class="text-2xl font-bold">{{ systemStats.total_tasks }}</p>
+            </div>
+            <div class="bg-white/20 backdrop-blur rounded-lg p-4">
+              <p class="text-sm text-white/80">Layer 1 Terms</p>
+              <p class="text-2xl font-bold">{{ systemStats.completed_terms }}</p>
+            </div>
+            <div class="bg-white/20 backdrop-blur rounded-lg p-4">
+              <p class="text-sm text-white/80">Bilingual Pairs</p>
+              <p class="text-2xl font-bold">{{ systemStats.bilingual_pairs }}</p>
+            </div>
+            <div class="bg-white/20 backdrop-blur rounded-lg p-4">
+              <p class="text-sm text-white/80">Database Size</p>
+              <p class="text-2xl font-bold">{{ formatBytes(systemStats.db_size_bytes) }}</p>
+            </div>
+          </div>
+        </div>
+
+
+        <!-- Danger Zone -->
+        <div class="bg-white rounded-xl shadow-lg border border-red-200 overflow-hidden">
+          <div class="bg-red-600 px-6 py-4">
+            <h3 class="text-lg font-bold text-white">⚠️ Danger Zone</h3>
+          </div>
+          <div class="p-6 space-y-4">
+            <div class="flex items-center justify-between">
+              <div>
+                <p class="font-medium text-gray-800">Backup Database</p>
+                <p class="text-sm text-gray-500">Download corpus.db for safekeeping</p>
+              </div>
+              <button @click="downloadBackup" class="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition">
+                📥 Download
+              </button>
+            </div>
+            <hr class="border-gray-200" />
+            <div class="flex items-center justify-between">
+              <div>
+                <p class="font-medium text-red-700">Reset All Data</p>
+                <p class="text-sm text-gray-500">Delete all tasks, terms, and Layer 2 data. Cannot be undone!</p>
+              </div>
+              <button @click="resetConfirm = true" class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition">
+                🗑️ Reset
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Reset Confirmation Modal -->
+        <div v-if="resetConfirm" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div class="bg-white rounded-xl shadow-2xl p-6 max-w-md mx-4">
+            <h3 class="text-xl font-bold text-red-700 mb-4">⚠️ Confirm Reset</h3>
+            <p class="text-gray-600 mb-4">This will permanently delete ALL data including Layer 1 terms, Layer 2 reports, and alignments.</p>
+            <div class="flex gap-3">
+              <button @click="resetAllData" :disabled="resetting" class="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50">
+                {{ resetting ? 'Resetting...' : 'Yes, Reset' }}
+              </button>
+              <button @click="resetConfirm = false" :disabled="resetting" class="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300">
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -339,18 +661,5 @@ const handleViewTask = (taskId) => {
 }
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background: #94a3b8; 
-}
-@keyframes fade-in-down {
-    0% {
-        opacity: 0;
-        transform: translateY(-10px);
-    }
-    100% {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-.animate-fade-in-down {
-    animation: fade-in-down 0.3s ease-out;
 }
 </style>

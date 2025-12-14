@@ -15,7 +15,7 @@ const error = ref(null)
 
 // Language selection
 const availableLanguages = ref([])
-const selectedLanguages = ref(['en', 'zh'])
+const selectedLanguages = ref(['en'])
 const loadingLanguages = ref(false)
 
 // Duplicate detection state

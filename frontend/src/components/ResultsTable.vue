@@ -532,7 +532,9 @@ onMounted(async () => {
             <input type="checkbox" v-model="cleanOptions.removeMissingChinese" class="mt-1" />
             <div>
               <p class="font-medium text-gray-800">Remove terms missing translations</p>
-              <p class="text-sm text-gray-500">{{ qualityData?.missing_chinese || 0 }} entries</p>
+              <p class="text-sm text-gray-500">
+                {{ qualityData?.missing_chinese || 0 }} entries missing in {{ targetLanguages.filter(l => l !== 'en').join(', ').toUpperCase() || 'target languages' }}
+              </p>
             </div>
           </label>
           
@@ -540,10 +542,11 @@ onMounted(async () => {
             <input type="checkbox" v-model="cleanOptions.removeShortSummaries" class="mt-1" />
             <div>
               <p class="font-medium text-gray-800">Remove terms with short summaries</p>
-              <p class="text-sm text-gray-500">
-                EN: {{ qualityData?.en_summary_too_short || 0 }} | 
-                ZH: {{ qualityData?.zh_summary_too_short || 0 }}
-              </p>
+              <div class="text-sm text-gray-500 flex flex-wrap gap-2 mt-1">
+                <span v-for="lang in targetLanguages" :key="lang" class="px-2 py-0.5 bg-gray-100 rounded">
+                  {{ languageFlags[lang] || '🌐' }} {{ lang.toUpperCase() }}: {{ lang === 'en' ? (qualityData?.en_summary_too_short || 0) : (qualityData?.zh_summary_too_short || 0) }}
+                </span>
+              </div>
             </div>
           </label>
         </div>

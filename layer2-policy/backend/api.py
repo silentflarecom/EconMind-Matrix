@@ -128,15 +128,25 @@ async def upload_report(
 
 
 @policy_router.post("/upload-text")
-async def upload_text_report(
-    text: str = Form(..., description="Report text content"),
-    source: str = Form(..., description="Report source: pboc or fed"),
-    title: str = Form(..., description="Report title")
-):
+async def upload_text_report(request: dict):
     """
     Upload a policy report as plain text (no PDF required).
     Useful for testing or when PDF is already converted.
+    
+    Request body:
+    {
+        "text": "Report content...",
+        "source": "pboc" or "fed",
+        "title": "Report Title"
+    }
     """
+    text = request.get("text")
+    source = request.get("source")
+    title = request.get("title")
+    
+    if not text or not source or not title:
+        raise HTTPException(400, "Missing required fields: text, source, title")
+    
     if source not in ["pboc", "fed"]:
         raise HTTPException(400, f"Invalid source: {source}")
     
@@ -154,9 +164,8 @@ async def upload_text_report(
     
     return {
         "success": True,
-        "report_id": report_id,
-        "title": result.report.title,
-        "paragraphs": len(result.paragraphs)
+        "report": {"id": report_id, "title": result.report.title},
+        "paragraphs_count": len(result.paragraphs)
     }
 
 
@@ -223,19 +232,28 @@ async def get_paragraphs(
 # ==================== Alignment Endpoints ====================
 
 @policy_router.post("/align")
-async def run_alignment(
-    source_report_id: int = Form(..., description="Source report ID (e.g., PBOC)"),
-    target_report_id: int = Form(..., description="Target report ID (e.g., Fed)"),
-    threshold: float = Form(0.5, description="Minimum similarity score"),
-    method: str = Form("auto", description="Alignment method: auto, sbert, topic"),
-    topic_filter: str = Form(None, description="Only align paragraphs with this topic")
-):
+async def run_alignment(request: dict):
     """
     Run paragraph alignment between two reports.
     
-    This creates semantic alignments between paragraphs from different reports,
-    identifying similar content about the same economic topics.
+    Request body:
+    {
+        "source_report_id": 1,
+        "target_report_id": 2,
+        "threshold": 0.5,
+        "method": "auto",
+        "topic_filter": null
+    }
     """
+    source_report_id = request.get("source_report_id")
+    target_report_id = request.get("target_report_id")
+    threshold = request.get("threshold", 0.5)
+    method = request.get("method", "auto")
+    topic_filter = request.get("topic_filter")
+    
+    if not source_report_id or not target_report_id:
+        raise HTTPException(400, "Missing required fields: source_report_id, target_report_id")
+    
     # Validate reports exist
     source_report = await db.get_report(source_report_id)
     target_report = await db.get_report(target_report_id)
@@ -466,6 +484,129 @@ async def search_term_in_policy(
         }
     
     return result
+
+# ==================== Export ====================
+
+@policy_router.get("/export/alignments")
+async def export_alignments(format: str = Query("jsonl", enum=["json", "jsonl"])):
+    """Export all alignments in JSON or JSONL format."""
+    import json
+    from fastapi.responses import StreamingResponse
+    
+    alignments = await db.get_all_alignments()
+    
+    if format == "json":
+        content = json.dumps({
+            "total": len(alignments),
+            "alignments": [a.to_dict() for a in alignments]
+        }, indent=2, ensure_ascii=False)
+        return StreamingResponse(
+            iter([content]),
+            media_type="application/json",
+            headers={"Content-Disposition": "attachment; filename=layer2_alignments.json"}
+        )
+    else:  # jsonl
+        def generate():
+            for a in alignments:
+                yield json.dumps(a.to_dict(), ensure_ascii=False) + "\n"
+        
+        return StreamingResponse(
+            generate(),
+            media_type="application/x-ndjson",
+            headers={"Content-Disposition": "attachment; filename=layer2_alignments.jsonl"}
+        )
+
+
+@policy_router.get("/export/reports")
+async def export_reports(format: str = Query("jsonl", enum=["json", "jsonl"])):
+    """Export all reports with paragraphs in JSON or JSONL format."""
+    import json
+    from fastapi.responses import StreamingResponse
+    
+    reports = await db.get_all_reports()
+    
+    # Fetch paragraphs for each report
+    export_data = []
+    for report in reports:
+        paragraphs = await db.get_report_paragraphs(report.id)
+        export_data.append({
+            "report": report.to_dict(),
+            "paragraphs": [p.to_dict() for p in paragraphs]
+        })
+    
+    if format == "json":
+        content = json.dumps({
+            "total_reports": len(export_data),
+            "reports": export_data
+        }, indent=2, ensure_ascii=False)
+        return StreamingResponse(
+            iter([content]),
+            media_type="application/json",
+            headers={"Content-Disposition": "attachment; filename=layer2_reports.json"}
+        )
+    else:  # jsonl
+        def generate():
+            for item in export_data:
+                yield json.dumps(item, ensure_ascii=False) + "\n"
+        
+        return StreamingResponse(
+            generate(),
+            media_type="application/x-ndjson",
+            headers={"Content-Disposition": "attachment; filename=layer2_reports.jsonl"}
+        )
+
+
+@policy_router.get("/export/parallel-corpus")
+async def export_parallel_corpus(format: str = Query("jsonl", enum=["json", "jsonl", "tsv"])):
+    """Export aligned paragraphs as parallel corpus for translation training."""
+    import json
+    from fastapi.responses import StreamingResponse
+    
+    alignments = await db.get_all_alignments()
+    
+    if format == "tsv":
+        def generate():
+            yield "source_text\ttarget_text\tsimilarity\ttopic\n"
+            for a in alignments:
+                source = (a.source_text or "").replace("\t", " ").replace("\n", " ")
+                target = (a.target_text or "").replace("\t", " ").replace("\n", " ")
+                yield f"{source}\t{target}\t{a.similarity_score:.3f}\t{a.topic or ''}\n"
+        
+        return StreamingResponse(
+            generate(),
+            media_type="text/tab-separated-values",
+            headers={"Content-Disposition": "attachment; filename=layer2_parallel_corpus.tsv"}
+        )
+    elif format == "json":
+        corpus = [{
+            "source": a.source_text,
+            "target": a.target_text,
+            "similarity": a.similarity_score,
+            "topic": a.topic,
+            "method": a.alignment_method.value if hasattr(a.alignment_method, 'value') else str(a.alignment_method)
+        } for a in alignments]
+        
+        content = json.dumps({"pairs": corpus, "total": len(corpus)}, indent=2, ensure_ascii=False)
+        return StreamingResponse(
+            iter([content]),
+            media_type="application/json",
+            headers={"Content-Disposition": "attachment; filename=layer2_parallel_corpus.json"}
+        )
+    else:  # jsonl
+        def generate():
+            for a in alignments:
+                yield json.dumps({
+                    "source": a.source_text,
+                    "target": a.target_text,
+                    "similarity": a.similarity_score,
+                    "topic": a.topic
+                }, ensure_ascii=False) + "\n"
+        
+        return StreamingResponse(
+            generate(),
+            media_type="application/x-ndjson",
+            headers={"Content-Disposition": "attachment; filename=layer2_parallel_corpus.jsonl"}
+        )
 
 
 # ==================== Health Check ====================

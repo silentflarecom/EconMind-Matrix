@@ -502,11 +502,19 @@ async def analyze_data_quality(task_id: int = None, min_summary_length: int = 50
         ]
         
         # Calculate quality score (0-100)
-        if quality['completed_terms'] > 0:
-            issues = quality['missing_chinese'] + quality['en_summary_too_short'] + quality['zh_summary_too_short']
+        # Score based on: completed terms without issues
+        if quality['total_terms'] > 0:
+            # Issues = failed + missing translations + short summaries
+            issues = (quality['failed_terms'] + 
+                     quality['missing_chinese'] + 
+                     quality['en_summary_too_short'] + 
+                     quality['zh_summary_too_short'])
+            # Score = (total - issues) / total * 100
+            # But cap at 0 minimum
+            good_terms = max(0, quality['completed_terms'] - quality['missing_chinese'] - quality['en_summary_too_short'] - quality['zh_summary_too_short'])
             quality['quality_score'] = round(
-                (quality['completed_terms'] - issues) / quality['completed_terms'] * 100, 1
-            )
+                good_terms / quality['total_terms'] * 100, 1
+            ) if quality['total_terms'] > 0 else 0
         else:
             quality['quality_score'] = 0
         

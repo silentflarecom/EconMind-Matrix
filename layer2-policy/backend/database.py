@@ -445,20 +445,29 @@ class PolicyDatabase:
     
     def _row_to_alignment(self, row: aiosqlite.Row) -> PolicyAlignment:
         """Convert database row to PolicyAlignment object."""
+        # Convert to dict for easier access
+        row_dict = dict(row)
+        
+        # Handle alignment_method conversion with fallback
+        try:
+            method = AlignmentMethod(row_dict.get('alignment_method', 'keyword_matching'))
+        except (ValueError, KeyError):
+            method = AlignmentMethod.KEYWORD_MATCHING
+        
         return PolicyAlignment(
-            id=row['id'],
-            source_paragraph_id=row['source_paragraph_id'],
-            target_paragraph_id=row['target_paragraph_id'],
-            similarity_score=row['similarity_score'],
-            alignment_method=AlignmentMethod(row['alignment_method']),
-            topic=row['topic'],
-            term_id=row['term_id'],
-            verified=bool(row['verified']),
-            source_text=row.get('source_text'),
-            target_text=row.get('target_text'),
-            source_report_title=row.get('source_report_title'),
-            target_report_title=row.get('target_report_title'),
-            created_at=datetime.fromisoformat(row['created_at']) if row['created_at'] else None
+            id=row_dict.get('id'),
+            source_paragraph_id=row_dict.get('source_paragraph_id', 0),
+            target_paragraph_id=row_dict.get('target_paragraph_id', 0),
+            similarity_score=row_dict.get('similarity_score', 0.0),
+            alignment_method=method,
+            topic=row_dict.get('topic'),
+            term_id=row_dict.get('term_id'),
+            verified=bool(row_dict.get('verified')) if row_dict.get('verified') else False,
+            source_text=row_dict.get('source_text'),
+            target_text=row_dict.get('target_text'),
+            source_report_title=row_dict.get('source_report_title'),
+            target_report_title=row_dict.get('target_report_title'),
+            created_at=datetime.fromisoformat(row_dict['created_at']) if row_dict.get('created_at') else None
         )
     
     # ==================== Statistics ====================
@@ -503,6 +512,37 @@ class PolicyDatabase:
                 stats["avg_similarity"] = round(avg, 4) if avg else 0
             
             return stats
+    
+    # ==================== Export Helpers ====================
+    
+    async def get_all_reports(self) -> List[PolicyReport]:
+        """Get all reports for export."""
+        return await self.get_reports(limit=10000)
+    
+    async def get_all_alignments(self) -> List[PolicyAlignment]:
+        """Get all alignments for export."""
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute("""
+                SELECT 
+                    a.*,
+                    sp.paragraph_text as source_text,
+                    tp.paragraph_text as target_text,
+                    sr.title as source_report_title,
+                    tr.title as target_report_title
+                FROM policy_alignments a
+                LEFT JOIN policy_paragraphs sp ON a.source_paragraph_id = sp.id
+                LEFT JOIN policy_paragraphs tp ON a.target_paragraph_id = tp.id
+                LEFT JOIN policy_reports sr ON sp.report_id = sr.id
+                LEFT JOIN policy_reports tr ON tp.report_id = tr.id
+                ORDER BY a.similarity_score DESC
+            """) as cursor:
+                rows = await cursor.fetchall()
+                return [self._row_to_alignment(row) for row in rows]
+    
+    async def get_report_paragraphs(self, report_id: int) -> List[PolicyParagraph]:
+        """Get all paragraphs for a specific report."""
+        return await self.get_paragraphs(report_id)
 
 
 # Convenience function for quick database initialization

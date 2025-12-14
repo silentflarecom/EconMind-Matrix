@@ -302,7 +302,7 @@ class PolicyAligner:
                         topic_key
                     )
                     
-                    if score > 0.3:  # Minimum overlap threshold
+                    if score > 0.1:  # Lowered threshold
                         alignment = PolicyAlignment(
                             source_paragraph_id=source_para.id or source_para.paragraph_index,
                             target_paragraph_id=target_para.id or target_para.paragraph_index,
@@ -314,9 +314,45 @@ class PolicyAligner:
                         )
                         alignments.append(alignment)
         
+        # Also try matching all paragraphs with simple Jaccard similarity
+        # This catches cases where topics weren't detected properly
+        if not alignments:
+            for source_para in source_paragraphs:
+                for target_para in target_paragraphs:
+                    score = self._jaccard_similarity(
+                        source_para.paragraph_text,
+                        target_para.paragraph_text
+                    )
+                    if score > 0.05:  # Very low threshold for fallback
+                        shared_topic = source_para.topic or target_para.topic
+                        alignment = PolicyAlignment(
+                            source_paragraph_id=source_para.id or source_para.paragraph_index,
+                            target_paragraph_id=target_para.id or target_para.paragraph_index,
+                            similarity_score=score,
+                            alignment_method=AlignmentMethod.KEYWORD_MATCHING,
+                            topic=shared_topic,
+                            source_text=source_para.paragraph_text,
+                            target_text=target_para.paragraph_text
+                        )
+                        alignments.append(alignment)
+        
         # Sort by similarity score
         alignments.sort(key=lambda x: x.similarity_score, reverse=True)
         return alignments
+    
+    def _jaccard_similarity(self, text1: str, text2: str) -> float:
+        """Compute Jaccard similarity between two texts."""
+        # Simple word-level Jaccard
+        words1 = set(re.findall(r'\w+', text1.lower()))
+        words2 = set(re.findall(r'\w+', text2.lower()))
+        
+        if not words1 or not words2:
+            return 0.0
+        
+        intersection = len(words1 & words2)
+        union = len(words1 | words2)
+        
+        return intersection / union if union > 0 else 0.0
     
     def _compute_keyword_overlap(
         self,
