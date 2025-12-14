@@ -26,12 +26,38 @@ from database import (
 from scheduler import start_batch_crawl, cancel_batch_crawl, retry_failed_terms, get_supported_languages
 from models import Association
 
+# Import Layer 2 Policy API
+import sys
+from pathlib import Path
+# Add layer2-policy to path
+layer2_path = Path(__file__).parent.parent / "layer2-policy"
+if str(layer2_path) not in sys.path:
+    sys.path.insert(0, str(layer2_path))
+
+try:
+    from backend.api import policy_router
+    LAYER2_AVAILABLE = True
+    print("✓ Layer 2 Policy API loaded")
+except ImportError as e:
+    LAYER2_AVAILABLE = False
+    print(f"⚠ Layer 2 Policy API not available: {e}")
+
 # Lifespan context manager for startup/shutdown events
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
     await init_database()
     print("✓ Database initialized")
+    
+    # Initialize Layer 2 database
+    if LAYER2_AVAILABLE:
+        try:
+            from backend.database import init_layer2_database
+            await init_layer2_database()
+            print("✓ Layer 2 database initialized")
+        except Exception as e:
+            print(f"⚠ Layer 2 database initialization failed: {e}")
+    
     yield
     # Shutdown (if needed)
 
@@ -45,6 +71,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Include Layer 2 Policy router
+if LAYER2_AVAILABLE:
+    app.include_router(policy_router, prefix="/api/policy", tags=["policy"])
+    print("✓ Layer 2 Policy routes registered at /api/policy")
 
 # Initialize Wikipedia API
 # User-Agent is explicitly set to comply with Wikimedia User-Agent Policy
