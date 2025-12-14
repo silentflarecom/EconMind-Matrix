@@ -5,8 +5,9 @@ import BatchImport from './components/BatchImport.vue'
 import ProgressMonitor from './components/ProgressMonitor.vue'
 import ResultsTable from './components/ResultsTable.vue'
 import TaskManager from './components/TaskManager.vue'
+import PolicyCompare from './components/PolicyCompare.vue'
 
-// Active view: 'single', 'batch', or 'manage'
+// Active view: 'single', 'batch', 'manage', or 'policy'
 const activeView = ref('single')
 
 // Single search state
@@ -156,6 +157,17 @@ const handleViewTask = (taskId) => {
         >
           ⚙️ Manage
         </button>
+        <button
+          @click="activeView = 'policy'"
+          :class="[
+            'px-8 py-3 rounded-xl font-semibold text-lg transition-all shadow-md',
+            activeView === 'policy'
+              ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-emerald-200'
+              : 'bg-white text-gray-600 hover:bg-gray-50'
+          ]"
+        >
+          📊 Policy Corpus
+        </button>
       </div>
 
       <!-- Single Search View -->
@@ -304,6 +316,11 @@ const handleViewTask = (taskId) => {
       <!-- Manage View -->
       <div v-if="activeView === 'manage'" class="space-y-6">
         <TaskManager @view-task="handleViewTask" />
+      </div>
+
+      <!-- Policy View (Layer 2) -->
+      <div v-if="activeView === 'policy'" class="space-y-6">
+        <PolicyCompare />
       </div>
     </div>
   </div>
