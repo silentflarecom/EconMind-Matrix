@@ -330,53 +330,139 @@
     <!-- Articles Tab -->
     <div v-if="activeTab === 'articles'" class="space-y-6">
       <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-        <div class="flex items-center justify-between mb-4">
-          <h3 class="text-lg font-semibold">📰 News Articles</h3>
-          <div class="flex gap-2">
+        <!-- Header with Search and Filters -->
+        <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-6">
+          <div class="flex items-center gap-3">
+            <h3 class="text-lg font-semibold">📰 News Articles</h3>
+            <span class="text-sm text-gray-500 bg-gray-100 px-2 py-1 rounded-full">
+              {{ articles.length }} articles
+            </span>
+          </div>
+          
+          <div class="flex flex-wrap gap-2 items-center">
+            <!-- Search Box -->
+            <div class="relative">
+              <input 
+                type="text" 
+                v-model="articleSearchQuery"
+                @input="filterArticlesLocally"
+                placeholder="🔍 Search articles..."
+                class="w-64 px-4 py-2 pl-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent text-sm"
+              />
+              <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">🔍</span>
+            </div>
+            
+            <!-- Source Filter -->
+            <select 
+              v-model="filterSource"
+              @change="loadArticles"
+              class="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+            >
+              <option value="">All Sources</option>
+              <option v-for="source in uniqueSources" :key="source" :value="source">
+                {{ source }}
+              </option>
+            </select>
+            
+            <!-- Sentiment Filter -->
             <select 
               v-model="filterSentiment"
               @change="loadArticles"
-              class="px-3 py-1 border border-gray-300 rounded-lg text-sm"
+              class="px-3 py-2 border border-gray-300 rounded-lg text-sm"
             >
               <option value="">All Sentiments</option>
               <option value="bullish">🟢 Bullish</option>
               <option value="bearish">🔴 Bearish</option>
               <option value="neutral">⚪ Neutral</option>
             </select>
-            <button @click="loadArticles" class="px-3 py-1 bg-gray-100 rounded-lg hover:bg-gray-200">
-              🔄 Refresh
+            
+            <!-- Refresh Button -->
+            <button 
+              @click="loadArticles" 
+              :disabled="loadingArticles"
+              class="px-3 py-2 bg-amber-100 text-amber-700 rounded-lg hover:bg-amber-200 transition-colors flex items-center gap-1"
+            >
+              <span :class="{'animate-spin': loadingArticles}">🔄</span>
+              <span class="hidden md:inline">Refresh</span>
             </button>
           </div>
         </div>
 
-        <!-- Articles List -->
-        <div v-if="loadingArticles" class="text-center py-8">
-          <div class="animate-spin w-8 h-8 border-4 border-amber-500 border-t-transparent rounded-full mx-auto"></div>
+        <!-- Loading State -->
+        <div v-if="loadingArticles" class="text-center py-12">
+          <div class="animate-spin w-10 h-10 border-4 border-amber-500 border-t-transparent rounded-full mx-auto mb-4"></div>
+          <p class="text-gray-500">Loading articles...</p>
         </div>
-        <div v-else-if="articles.length === 0" class="text-gray-500 text-center py-8">
-          No articles found.
+        
+        <!-- Empty State -->
+        <div v-else-if="filteredArticles.length === 0" class="text-center py-12">
+          <div class="text-6xl mb-4">📭</div>
+          <p class="text-gray-500 text-lg">No articles found.</p>
+          <p class="text-gray-400 text-sm mt-2">Try adjusting your filters or crawl more news sources.</p>
         </div>
-        <div v-else class="space-y-4">
+        
+        <!-- Articles Grouped by Source -->
+        <div v-else class="space-y-6">
           <div 
-            v-for="article in articles" 
-            :key="article.id"
-            class="border border-gray-200 rounded-lg p-4 hover:border-amber-300 transition-colors"
+            v-for="(groupArticles, sourceName) in articlesBySource" 
+            :key="sourceName"
+            class="border border-gray-200 rounded-xl overflow-hidden"
           >
-            <div class="flex items-start gap-4">
-              <span :class="getSentimentBadgeClass(article.annotation?.sentiment?.label)" class="mt-1">
-                {{ getSentimentEmoji(article.annotation?.sentiment?.label) }}
+            <!-- Source Header (Collapsible) -->
+            <button 
+              @click="toggleSourceGroup(sourceName)"
+              class="w-full px-4 py-3 bg-gradient-to-r from-gray-50 to-gray-100 flex items-center justify-between hover:from-gray-100 hover:to-gray-150 transition-colors"
+            >
+              <div class="flex items-center gap-3">
+                <span class="text-lg">{{ getSourceEmoji(sourceName) }}</span>
+                <span class="font-semibold text-gray-800">{{ sourceName }}</span>
+                <span class="text-sm text-gray-500 bg-white px-2 py-0.5 rounded-full border">
+                  {{ groupArticles.length }} articles
+                </span>
+              </div>
+              <span class="text-gray-400 transition-transform" :class="{'rotate-180': expandedSources.includes(sourceName)}">
+                ▼
               </span>
-              <div class="flex-1">
-                <h4 class="font-medium text-gray-900">{{ article.title }}</h4>
-                <p class="text-sm text-gray-500 mt-1">{{ article.summary?.substring(0, 200) }}...</p>
-                <div class="flex items-center gap-4 mt-2 text-xs text-gray-400">
-                  <span>{{ article.source }}</span>
-                  <span>{{ formatDate(article.published_date) }}</span>
-                  <span v-if="article.annotation">
-                    Confidence: {{ (article.annotation.sentiment?.score * 100).toFixed(0) }}%
+            </button>
+            
+            <!-- Articles in Group -->
+            <div v-if="expandedSources.includes(sourceName)" class="divide-y divide-gray-100">
+              <div 
+                v-for="article in groupArticles.slice(0, 10)" 
+                :key="article.id"
+                class="p-4 hover:bg-amber-50 transition-colors"
+              >
+                <div class="flex items-start gap-3">
+                  <span class="text-lg mt-0.5">
+                    {{ getSentimentEmoji(article.annotation?.sentiment?.label) }}
                   </span>
-                  <a :href="article.url" target="_blank" class="text-amber-600 hover:underline">View Source ↗</a>
+                  <div class="flex-1 min-w-0">
+                    <h4 class="font-medium text-gray-900 line-clamp-2">{{ article.title }}</h4>
+                    <p class="text-sm text-gray-500 mt-1 line-clamp-2">{{ article.summary?.substring(0, 150) }}...</p>
+                    <div class="flex items-center flex-wrap gap-3 mt-2 text-xs text-gray-400">
+                      <span class="flex items-center gap-1">
+                        📅 {{ formatDate(article.published_date) }}
+                      </span>
+                      <span v-if="article.annotation" class="flex items-center gap-1">
+                        🎯 {{ (article.annotation.sentiment?.score * 100).toFixed(0) }}% confidence
+                      </span>
+                      <a 
+                        :href="article.url" 
+                        target="_blank" 
+                        class="text-amber-600 hover:text-amber-700 hover:underline flex items-center gap-1"
+                      >
+                        View Source ↗
+                      </a>
+                    </div>
+                  </div>
                 </div>
+              </div>
+              
+              <!-- Show More Button -->
+              <div v-if="groupArticles.length > 10" class="p-3 bg-gray-50 text-center">
+                <span class="text-sm text-gray-500">
+                  + {{ groupArticles.length - 10 }} more articles from {{ sourceName }}
+                </span>
               </div>
             </div>
           </div>
@@ -570,7 +656,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import axios from 'axios'
 
 const API_BASE = 'http://localhost:8000/api/sentiment'
@@ -582,6 +668,9 @@ const recentArticles = ref([])
 const articles = ref([])
 const loadingArticles = ref(false)
 const filterSentiment = ref('')
+const filterSource = ref('')
+const articleSearchQuery = ref('')
+const expandedSources = ref([])  // For collapsible source groups
 
 // Crawl state
 const availableSources = ref([])
@@ -649,6 +738,45 @@ const sentimentPercentages = computed(() => {
   }
 })
 
+// Computed - Filter articles by search query
+const filteredArticles = computed(() => {
+  let result = articles.value
+  
+  // Filter by search query
+  if (articleSearchQuery.value) {
+    const query = articleSearchQuery.value.toLowerCase()
+    result = result.filter(a => 
+      a.title?.toLowerCase().includes(query) ||
+      a.summary?.toLowerCase().includes(query)
+    )
+  }
+  
+  return result
+})
+
+// Computed - Get unique sources from articles
+const uniqueSources = computed(() => {
+  const sources = [...new Set(articles.value.map(a => a.source))]
+  return sources.sort()
+})
+
+// Computed - Group articles by source
+const articlesBySource = computed(() => {
+  const groups = {}
+  filteredArticles.value.forEach(article => {
+    const source = article.source || 'Unknown'
+    if (!groups[source]) {
+      groups[source] = []
+    }
+    groups[source].push(article)
+  })
+  
+  // Sort groups by article count (descending)
+  return Object.fromEntries(
+    Object.entries(groups).sort((a, b) => b[1].length - a[1].length)
+  )
+})
+
 // Methods
 const loadStats = async () => {
   try {
@@ -671,9 +799,12 @@ const loadSources = async () => {
 const loadArticles = async () => {
   loadingArticles.value = true
   try {
-    let url = `${API_BASE}/articles?limit=50`
+    let url = `${API_BASE}/articles?limit=200`  // Increased limit for grouping
     if (filterSentiment.value) {
-      url = `${API_BASE}/annotations?sentiment_label=${filterSentiment.value}&limit=50`
+      url = `${API_BASE}/annotations?sentiment_label=${filterSentiment.value}&limit=200`
+    }
+    if (filterSource.value) {
+      url += `&source=${filterSource.value}`
     }
     const response = await axios.get(url)
     articles.value = response.data.articles || response.data.annotations?.map(a => ({
@@ -683,6 +814,10 @@ const loadArticles = async () => {
       url: a.article_url,
       annotation: { sentiment: { label: a.sentiment?.label, score: a.sentiment?.score } }
     })) || []
+    
+    // Auto-expand first 3 source groups
+    const sources = [...new Set(articles.value.map(a => a.source))].slice(0, 3)
+    expandedSources.value = sources
   } catch (error) {
     console.error('Failed to load articles:', error)
   } finally {
@@ -707,6 +842,49 @@ const loadHotTerms = async () => {
     console.error('Failed to load hot terms:', error)
   }
 }
+
+// Toggle source group expansion
+const toggleSourceGroup = (sourceName) => {
+  const idx = expandedSources.value.indexOf(sourceName)
+  if (idx > -1) {
+    expandedSources.value.splice(idx, 1)
+  } else {
+    expandedSources.value.push(sourceName)
+  }
+}
+
+// Get emoji for news source
+const getSourceEmoji = (source) => {
+  const sourceEmojis = {
+    'bloomberg': '📈',
+    'reuters': '🌍',
+    'wsj': '📰',
+    'ft': '💼',
+    'bbc': '🇬🇧',
+    'guardian': '📝',
+    'cnbc': '📺',
+    'yahoo_finance': '💹',
+    'economictimes': '🇮🇳',
+    'nikkei': '🇯🇵',
+    'xinhua': '🇨🇳',
+    'chinadaily': '🇨🇳',
+    'caixin': '🇨🇳',
+    'dw': '🇩🇪',
+    'koreaherald': '🇰🇷',
+    'afr': '🇦🇺',
+    'globeandmail': '🇨🇦',
+    'marketwatch': '📊',
+    'japantimes': '🇯🇵',
+  }
+  return sourceEmojis[source?.toLowerCase()] || '📰'
+}
+
+// Local filter function (no API call)
+const filterArticlesLocally = () => {
+  // The filtering is handled by the computed property
+  // This function is just for input event binding
+}
+
 
 const toggleSource = (key) => {
   const idx = selectedSources.value.indexOf(key)
@@ -752,50 +930,58 @@ const startCrawl = async () => {
       crawlKeywords.value.split(',').forEach(k => params.append('keywords', k.trim()))
     }
     
-    crawlProgress.value = 10
-    crawlStatusMessage.value = 'Connecting to news sources...'
-    
     const response = await axios.post(`${API_BASE}/crawl?${params.toString()}`)
     
-    crawlProgress.value = 30
-    crawlStatusMessage.value = 'Fetching RSS feeds...'
+    if (!response.data.success) {
+      crawlMessage.value = response.data.message || 'Crawl already in progress'
+      return
+    }
     
     crawlMessage.value = response.data.message || 'Crawl started!'
     
-    // Simulate progress
-    const progressInterval = setInterval(() => {
-      if (crawlProgress.value < 90) {
-        crawlProgress.value += 10
-        const messages = [
-          'Parsing articles...',
-          'Detecting related terms...',
-          'Storing data...',
-          'Almost done...'
-        ]
-        crawlStatusMessage.value = messages[Math.floor(Math.random() * messages.length)]
+    // Poll for real progress from backend
+    const pollStatus = async () => {
+      try {
+        const statusRes = await axios.get(`${API_BASE}/crawl/status`)
+        const status = statusRes.data.status
+        const progress = statusRes.data.progress
+        
+        crawlProgress.value = progress
+        crawlStatusMessage.value = status.message || 'Crawling...'
+        
+        // If still crawling, continue polling
+        if (status.is_crawling) {
+          setTimeout(pollStatus, 1000)
+        } else {
+          // Crawl completed
+          crawlProgress.value = 100
+          crawlMessage.value = status.message
+          crawling.value = false
+          
+          // Refresh data
+          loadStats()
+          loadRecentArticles()
+        }
+      } catch (error) {
+        console.error('Failed to get crawl status:', error)
+        // Continue polling on error
+        if (crawling.value) {
+          setTimeout(pollStatus, 2000)
+        }
       }
-    }, 1000)
+    }
     
-    // Refresh after delay
-    setTimeout(() => {
-      clearInterval(progressInterval)
-      crawlProgress.value = 100
-      crawlStatusMessage.value = 'Completed!'
-      loadStats()
-      loadRecentArticles()
-    }, 6000)
+    // Start polling after a short delay
+    setTimeout(pollStatus, 500)
     
   } catch (error) {
     crawlError.value = true
     crawlMessage.value = error.response?.data?.detail || 'Failed to start crawl'
     crawlProgress.value = 0
-  } finally {
-    setTimeout(() => {
-      crawling.value = false
-      crawlProgress.value = 0
-    }, 7000)
+    crawling.value = false
   }
 }
+
 
 const startAnnotate = async () => {
   annotating.value = true
@@ -918,5 +1104,12 @@ onMounted(async () => {
     loadRecentArticles(),
     loadHotTerms()
   ])
+})
+
+// Watch for tab changes - auto-refresh articles when switching to articles tab
+watch(activeTab, (newTab) => {
+  if (newTab === 'articles') {
+    loadArticles()
+  }
 })
 </script>

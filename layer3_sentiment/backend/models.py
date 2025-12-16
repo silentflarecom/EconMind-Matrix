@@ -45,6 +45,7 @@ class NewsSource(Enum):
     
     # Australia
     AFR = "afr"
+    SMH = "smh"
     
     # India
     ECONOMIC_TIMES = "economictimes"

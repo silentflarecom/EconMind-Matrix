@@ -72,6 +72,18 @@ DB_PATH = Path("./corpus.db")
 # Initialize components
 db = SentimentDatabase(str(DB_PATH))
 
+# Crawl status tracking (for progress monitoring)
+crawl_status = {
+    "is_crawling": False,
+    "current_source": None,
+    "total_sources": 0,
+    "completed_sources": 0,
+    "articles_found": 0,
+    "articles_inserted": 0,
+    "started_at": None,
+    "message": "Idle"
+}
+
 
 # ==================== Initialization ====================
 
@@ -101,6 +113,20 @@ async def list_news_sources():
     }
 
 
+@sentiment_router.get("/crawl/status")
+async def get_crawl_status():
+    """Get current crawl status for progress monitoring."""
+    progress = 0
+    if crawl_status["total_sources"] > 0:
+        progress = int((crawl_status["completed_sources"] / crawl_status["total_sources"]) * 100)
+    
+    return {
+        "success": True,
+        "status": crawl_status,
+        "progress": progress
+    }
+
+
 @sentiment_router.post("/crawl")
 async def crawl_news(
     background_tasks: BackgroundTasks,
@@ -111,37 +137,92 @@ async def crawl_news(
     """
     Crawl news from specified sources.
     
-    The crawl runs in the background. Use GET /articles to see results.
+    The crawl runs in the background. Use GET /crawl/status to monitor progress.
     """
+    global crawl_status
+    
     if NewsCrawler is None:
         raise HTTPException(500, "News crawler not available. Check dependencies.")
+    
+    # Check if already crawling
+    if crawl_status["is_crawling"]:
+        return {
+            "success": False,
+            "message": "A crawl is already in progress",
+            "status": crawl_status
+        }
     
     # Validate sources
     valid_sources = [s for s in sources if s in NEWS_SOURCES]
     if not valid_sources:
         raise HTTPException(400, f"No valid sources. Available: {list(NEWS_SOURCES.keys())}")
     
+    # Initialize status
+    from datetime import datetime
+    crawl_status.update({
+        "is_crawling": True,
+        "current_source": None,
+        "total_sources": len(valid_sources),
+        "completed_sources": 0,
+        "articles_found": 0,
+        "articles_inserted": 0,
+        "started_at": datetime.now().isoformat(),
+        "message": "Starting crawl..."
+    })
+    
     async def do_crawl():
+        global crawl_status
         crawler = NewsCrawler(sources=valid_sources)
+        total_articles = []
+        
         try:
-            articles = await crawler.crawl_all(
-                days_back=days_back,
-                keywords=keywords
-            )
+            for i, source_key in enumerate(valid_sources):
+                crawl_status["current_source"] = source_key
+                crawl_status["message"] = f"Crawling {NEWS_SOURCES.get(source_key, {}).get('name', source_key)}..."
+                
+                print(f"📰 Crawling {source_key}...")
+                
+                articles = await crawler.crawl_rss(source_key)
+                
+                # Filter by date and keywords
+                from datetime import datetime, timedelta
+                cutoff = datetime.now() - timedelta(days=days_back)
+                articles = [a for a in articles if not a.published_date or a.published_date >= cutoff]
+                
+                if keywords:
+                    keywords_lower = [k.lower() for k in keywords]
+                    articles = [a for a in articles if any(
+                        kw in (a.title or '').lower() or kw in (a.summary or '').lower()
+                        for kw in keywords_lower
+                    )]
+                
+                total_articles.extend(articles)
+                crawl_status["articles_found"] = len(total_articles)
+                crawl_status["completed_sources"] = i + 1
             
             # Insert into database
-            inserted_ids = await db.insert_articles_batch(articles)
-            print(f"✓ Crawled {len(articles)} articles, inserted {len(inserted_ids)} new")
+            crawl_status["message"] = "Saving articles to database..."
+            inserted_ids = await db.insert_articles_batch(total_articles)
+            crawl_status["articles_inserted"] = len(inserted_ids)
+            crawl_status["message"] = f"Completed! {len(total_articles)} articles found, {len(inserted_ids)} new"
             
+            print(f"✓ Crawled {len(total_articles)} articles, inserted {len(inserted_ids)} new")
+            
+        except Exception as e:
+            crawl_status["message"] = f"Error: {str(e)}"
+            print(f"✗ Crawl error: {e}")
         finally:
             await crawler.close()
+            crawl_status["is_crawling"] = False
+            crawl_status["current_source"] = None
     
     background_tasks.add_task(do_crawl)
     
     return {
         "success": True,
         "message": f"Crawl started for {len(valid_sources)} sources (last {days_back} days)",
-        "sources": valid_sources
+        "sources": valid_sources,
+        "total_sources": len(valid_sources)
     }
 
 

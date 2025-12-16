@@ -223,10 +223,20 @@ NEWS_SOURCES = {
         "name": "Australian Financial Review",
         "country": "AU",
         "rss_urls": [
-            "https://www.afr.com/rss/economy",
+            "https://www.afr.com/rss/markets",  # Updated working URL
+            "https://www.afr.com/rss/companies",
         ],
         "language": "en",
         "source_enum": NewsSource.AFR
+    },
+    "smh": {
+        "name": "Sydney Morning Herald Business",
+        "country": "AU",
+        "rss_urls": [
+            "https://www.smh.com.au/rss/business.xml",
+        ],
+        "language": "en",
+        "source_enum": NewsSource.SMH
     },
     
     # === India ===
