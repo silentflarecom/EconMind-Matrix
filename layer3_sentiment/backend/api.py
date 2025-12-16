@@ -138,15 +138,17 @@ async def crawl_news(
     keywords: Optional[List[str]] = Query(default=None),
     max_concurrent: int = Query(default=3, ge=1, le=10),
     delay_seconds: float = Query(default=1.0, ge=0.5, le=10),
-    rotate_ua: bool = Query(default=True)
+    rotate_ua: bool = Query(default=True),
+    proxies: Optional[List[str]] = Query(default=None)
 ):
     """
     Start crawling news from specified sources.
     
-    New options:
+    Options:
     - max_concurrent: Maximum concurrent requests (1-10)
     - delay_seconds: Delay between requests (0.5-10 seconds)
     - rotate_ua: Whether to rotate User-Agent for each request
+    - proxies: List of proxy URLs (http://host:port, socks5://host:port)
     
     Use POST /crawl/stop to stop the crawl.
     Use GET /crawl/status to monitor progress.
@@ -188,6 +190,7 @@ async def crawl_news(
         # Create crawler with new options
         active_crawler = NewsCrawler(
             sources=valid_sources,
+            proxies=proxies,
             max_concurrent=max_concurrent,
             delay_seconds=delay_seconds,
             rotate_user_agent=rotate_ua
@@ -870,6 +873,21 @@ async def health_check():
         "annotator_available": SentimentAnnotator is not None or RuleBasedAnnotator is not None,
         "trend_analyzer_available": TrendAnalyzer is not None
     }
+
+
+@sentiment_router.get("/backup")
+async def backup_database():
+    """Download Layer 3 database for backup."""
+    from fastapi.responses import FileResponse
+    
+    if not DB_PATH.exists():
+        raise HTTPException(404, "Database file not found")
+    
+    return FileResponse(
+        path=str(DB_PATH),
+        filename="sentiment_corpus.db",
+        media_type="application/octet-stream"
+    )
 
 
 # Create FastAPI application for standalone testing

@@ -98,6 +98,59 @@ For issues or questions:
 
 ---
 
+## Layer 3: News Crawler Configuration
+
+The news crawler in Layer 3 supports advanced configuration options:
+
+### Crawler Settings
+
+| Setting | Default | Range | Description |
+|:--------|:--------|:------|:------------|
+| **Days Back** | 7 | 1-30 | How far back to crawl news |
+| **Concurrency** | 3 | 1-10 | Parallel HTTP requests |
+| **Delay** | 1.0 | 0.5-10 | Seconds between requests |
+| **Rotate UA** | ✓ | on/off | Rotate User-Agent headers |
+
+### Proxy Pool (Optional)
+
+To use proxies, enable the "Enable Proxies" checkbox and enter your proxies:
+```
+http://proxy1:8080
+socks5://user:pass@proxy2:1080
+http://192.168.1.100:3128
+```
+
+**Supported protocols:** `http://`, `https://`, `socks5://`
+
+### Running Crawler Detection
+
+When you open the Crawl tab, the system automatically checks if a crawler from a previous session is still running. If detected, a yellow warning banner will appear with a "Force Stop" button.
+
+---
+
+## System Management
+
+### Backing Up Data
+
+Go to **⚙️ System** page to download database backups:
+
+| Button | Downloads | Contents |
+|:-------|:----------|:---------|
+| 📚 Backup Layer 1 | `corpus.db` | Terms & bilingual definitions |
+| 📊 Backup Layer 2 | `policy_corpus.db` | Policy reports & alignments |
+| 📰 Backup Layer 3 | `sentiment_corpus.db` | News articles & annotations |
+
+### Resetting All Data
+
+⚠️ **WARNING:** The "Reset All Data" button will permanently delete:
+- **Layer 1:** All tasks, terms, and associations
+- **Layer 2:** All policy reports, paragraphs, and alignments
+- **Layer 3:** All news articles and sentiment annotations
+
+This action cannot be undone. Always backup your data first!
+
+---
+
 ## Troubleshooting
  
  **1. `CORS` errors in browser console:**
@@ -113,7 +166,17 @@ For issues or questions:
  - Verify your internet connection.
  - If crawling many terms, check if you've been rate-limited (slow down requests by increasing delay).
  - Verify your User-Agent is set correctly.
+
+**4. News crawler not stopping:**
+ - Click the "Stop Crawl" button and wait for verification (up to 15 seconds).
+ - If the crawler appears stuck, refresh the page and check the System page.
+ - Force stop using the yellow warning banner if a "running crawler" is detected.
+
+**5. Layer 2/3 statistics showing "No data":**
+ - Ensure the backend has been restarted after installation.
+ - Check that all Layer 2 and Layer 3 database tables exist in `corpus.db`.
  
  ---
  
  **Note**: This is an educational project. Please use it responsibly and in compliance with Wikipedia's policies.
+

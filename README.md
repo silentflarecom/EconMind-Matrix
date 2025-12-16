@@ -237,10 +237,15 @@ See [SETUP.md](SETUP.md) for details.
   - [x] Sentiment labels: Bullish, Bearish, Neutral
 
 - [x] **News Crawler** (`layer3-sentiment/crawler/news_crawler.py`)
-  - [x] RSS feed integration (Bloomberg, Reuters, WSJ, FT, Xinhua)
+  - [x] RSS feed integration (Bloomberg, Reuters, WSJ, FT, Xinhua, 21 sources)
   - [x] Async crawling with feedparser
   - [x] Term-based news filtering
   - [x] Automatic term detection from article content
+  - [x] **User-Agent rotation pool** (8 browser UAs)
+  - [x] **Proxy pool support** (http/https/socks5)
+  - [x] **Concurrency control** (1-10 concurrent requests)
+  - [x] **Custom delay** (0.5-10 seconds between requests)
+  - [x] **Manual start/stop** control with verification
 
 - [x] **LLM Sentiment Annotator** (`layer3-sentiment/annotation/llm_annotator.py`)
   - [x] Gemini API integration for sentiment analysis
@@ -272,10 +277,13 @@ See [SETUP.md](SETUP.md) for details.
 
 - [x] **Frontend Component** (`frontend/src/components/SentimentAnalysis.vue`)
   - [x] Dashboard with sentiment statistics
-  - [x] News crawling interface
-  - [x] Articles list with sentiment labels
+  - [x] News crawling interface with advanced options
+  - [x] Articles list with sentiment labels (search, filter, group by source)
   - [x] Trend analysis visualization
   - [x] Export options (JSON, JSONL, CSV, Doccano)
+  - [x] **Running crawler detection** on page load
+  - [x] **Force stop** with verification polling
+  - [x] **Proxy pool configuration UI**
 
 ### 🎯 Phase 4: Three-Layer Integration (February 2026)
 
@@ -316,7 +324,7 @@ See [SETUP.md](SETUP.md) for details.
 
 ## 📋 Current Development Status
 
-**Last Updated:** 2024-12-14 23:30
+**Last Updated:** 2024-12-16 23:00
 
 ### What's Completed
 
@@ -341,20 +349,33 @@ See [SETUP.md](SETUP.md) for details.
 | Export Scripts | 🔧 Framework | `scripts/export_dataset.py` |
 | Documentation | ✅ Complete | `docs/architecture.md`, `docs/api.md` |
 
+### Latest Updates (2024-12-16)
+
+**🔧 Crawler Enhancements:**
+- User-Agent rotation pool (8 realistic browser UAs)
+- Proxy pool support (http/https/socks5 protocols)
+- Concurrency control (1-10 parallel requests)
+- Custom delay settings (0.5-10 seconds)
+- Manual start/stop with verification polling
+- Running crawler detection on page load
+
+**🛡️ System Page Improvements:**
+- Three-layer statistics display (Layer 1, 2, 3)
+- Separate backup buttons for each layer's database
+- All-layers reset functionality
+- Enhanced reset confirmation with layer breakdown
+
+**📊 Backup Endpoints:**
+- `GET /api/system/backup` - Layer 1 (corpus.db)
+- `GET /api/policy/backup` - Layer 2 (policy_corpus.db)
+- `GET /api/sentiment/backup` - Layer 3 (sentiment_corpus.db)
+
 ### Next Actions
 
-1. **Validate Alignment Quality**
-   - Upload real PBOC and Fed reports.
-   - Run alignment with new Sentence-BERT model.
-   - Verify similarity scores in History tab.
-
-2. **Expand Topic Pool**
-   - Add specialized financial terms to Layer 2 Topic Pool.
-   - Test "Import from Layer 1" feature with large terminology datasets.
-
-3. **Phase 4 Integration (Next)**
-   - Unified Search across all 3 layers.
-   - Integrated Dashboard/Knowledge Graph.
+1. **Phase 4 Integration**
+   - Unified Search across all 3 layers
+   - Integrated Dashboard/Knowledge Graph
+   - Cross-layer term linking
 
 
 ---

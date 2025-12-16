@@ -116,6 +116,8 @@ const handleViewTask = (taskId) => {
 
 // System state
 const systemStats = ref(null)
+const layer2Stats = ref(null)
+const layer3Stats = ref(null)
 const userAgent = ref('')
 const loadingSettings = ref(false)
 const savingSettings = ref(false)
@@ -127,12 +129,16 @@ const resetting = ref(false)
 
 const loadSystemData = async () => {
   try {
-    const [statsRes, tasksRes] = await Promise.all([
+    const [statsRes, tasksRes, layer2Res, layer3Res] = await Promise.all([
       axios.get('http://localhost:8000/api/corpus/statistics'),
-      axios.get('http://localhost:8000/api/batch/tasks')
+      axios.get('http://localhost:8000/api/batch/tasks'),
+      axios.get('http://localhost:8000/api/policy/stats').catch(() => ({ data: { statistics: null } })),
+      axios.get('http://localhost:8000/api/sentiment/stats').catch(() => ({ data: { statistics: null } }))
     ])
     systemStats.value = statsRes.data
     tasks.value = tasksRes.data
+    layer2Stats.value = layer2Res.data?.statistics || null
+    layer3Stats.value = layer3Res.data?.statistics || null
   } catch (err) {
     console.error('Failed to load system data:', err)
   }
@@ -164,6 +170,14 @@ const saveUserAgent = async () => {
 
 const downloadBackup = () => {
   window.open('http://localhost:8000/api/system/backup', '_blank')
+}
+
+const downloadLayer2Backup = () => {
+  window.open('http://localhost:8000/api/policy/backup', '_blank')
+}
+
+const downloadLayer3Backup = () => {
+  window.open('http://localhost:8000/api/sentiment/backup', '_blank')
 }
 
 const deleteTask = async (taskId) => {
@@ -594,25 +608,69 @@ const getStatusColor = (status) => {
         </div>
 
         <!-- Statistics -->
-        <div v-if="systemStats" class="bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl shadow-lg p-6 text-white">
-          <h3 class="text-lg font-bold mb-4">📊 Corpus Statistics (All Layers)</h3>
-          <div class="grid grid-cols-4 gap-4">
-            <div class="bg-white/20 backdrop-blur rounded-lg p-4">
-              <p class="text-sm text-white/80">Layer 1 Tasks</p>
-              <p class="text-2xl font-bold">{{ systemStats.total_tasks }}</p>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <!-- Layer 1 Stats -->
+          <div class="bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl shadow-lg p-6 text-white">
+            <h3 class="text-lg font-bold mb-3">📚 Layer 1: Terminology</h3>
+            <div v-if="systemStats" class="space-y-2">
+              <div class="flex justify-between">
+                <span class="text-white/80">Tasks</span>
+                <span class="font-bold">{{ systemStats.total_tasks || 0 }}</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-white/80">Terms</span>
+                <span class="font-bold">{{ systemStats.completed_terms || 0 }}</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-white/80">Bilingual Pairs</span>
+                <span class="font-bold">{{ systemStats.bilingual_pairs || 0 }}</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-white/80">DB Size</span>
+                <span class="font-bold">{{ formatBytes(systemStats.db_size_bytes) }}</span>
+              </div>
             </div>
-            <div class="bg-white/20 backdrop-blur rounded-lg p-4">
-              <p class="text-sm text-white/80">Layer 1 Terms</p>
-              <p class="text-2xl font-bold">{{ systemStats.completed_terms }}</p>
+            <div v-else class="text-white/60 text-sm">Loading...</div>
+          </div>
+          
+          <!-- Layer 2 Stats -->
+          <div class="bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl shadow-lg p-6 text-white">
+            <h3 class="text-lg font-bold mb-3">📊 Layer 2: Policy Corpus</h3>
+            <div v-if="layer2Stats" class="space-y-2">
+              <div class="flex justify-between">
+                <span class="text-white/80">Reports</span>
+                <span class="font-bold">{{ Object.values(layer2Stats.reports_by_source || {}).reduce((a, b) => a + b, 0) }}</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-white/80">Paragraphs</span>
+                <span class="font-bold">{{ layer2Stats.total_paragraphs || 0 }}</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-white/80">Alignments</span>
+                <span class="font-bold">{{ layer2Stats.total_alignments || 0 }}</span>
+              </div>
             </div>
-            <div class="bg-white/20 backdrop-blur rounded-lg p-4">
-              <p class="text-sm text-white/80">Bilingual Pairs</p>
-              <p class="text-2xl font-bold">{{ systemStats.bilingual_pairs }}</p>
+            <div v-else class="text-white/60 text-sm">No data</div>
+          </div>
+          
+          <!-- Layer 3 Stats -->
+          <div class="bg-gradient-to-br from-amber-500 to-orange-600 rounded-xl shadow-lg p-6 text-white">
+            <h3 class="text-lg font-bold mb-3">📰 Layer 3: Sentiment</h3>
+            <div v-if="layer3Stats" class="space-y-2">
+              <div class="flex justify-between">
+                <span class="text-white/80">Articles</span>
+                <span class="font-bold">{{ layer3Stats.total_articles || 0 }}</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-white/80">Annotations</span>
+                <span class="font-bold">{{ layer3Stats.total_annotations || 0 }}</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-white/80">Sources</span>
+                <span class="font-bold">{{ Object.keys(layer3Stats.sources_breakdown || {}).length }}</span>
+              </div>
             </div>
-            <div class="bg-white/20 backdrop-blur rounded-lg p-4">
-              <p class="text-sm text-white/80">Database Size</p>
-              <p class="text-2xl font-bold">{{ formatBytes(systemStats.db_size_bytes) }}</p>
-            </div>
+            <div v-else class="text-white/60 text-sm">No data</div>
           </div>
         </div>
 
@@ -623,23 +681,47 @@ const getStatusColor = (status) => {
             <h3 class="text-lg font-bold text-white">⚠️ Danger Zone</h3>
           </div>
           <div class="p-6 space-y-4">
+            <!-- Backup Layer 1 -->
             <div class="flex items-center justify-between">
               <div>
-                <p class="font-medium text-gray-800">Backup Database</p>
-                <p class="text-sm text-gray-500">Download corpus.db for safekeeping</p>
+                <p class="font-medium text-gray-800">📚 Backup Layer 1 (Terminology)</p>
+                <p class="text-sm text-gray-500">Download corpus.db - Terms & definitions</p>
               </div>
-              <button @click="downloadBackup" class="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition">
+              <button @click="downloadBackup" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">
                 📥 Download
               </button>
             </div>
             <hr class="border-gray-200" />
+            <!-- Backup Layer 2 -->
             <div class="flex items-center justify-between">
               <div>
+                <p class="font-medium text-gray-800">📊 Backup Layer 2 (Policy Corpus)</p>
+                <p class="text-sm text-gray-500">Download policy_corpus.db - Reports & alignments</p>
+              </div>
+              <button @click="downloadLayer2Backup" class="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition">
+                📥 Download
+              </button>
+            </div>
+            <hr class="border-gray-200" />
+            <!-- Backup Layer 3 -->
+            <div class="flex items-center justify-between">
+              <div>
+                <p class="font-medium text-gray-800">📰 Backup Layer 3 (Sentiment Corpus)</p>
+                <p class="text-sm text-gray-500">Download sentiment.db - Articles & annotations</p>
+              </div>
+              <button @click="downloadLayer3Backup" class="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition">
+                📥 Download
+              </button>
+            </div>
+            <hr class="border-gray-200" />
+            <!-- Reset All -->
+            <div class="flex items-center justify-between bg-red-50 -mx-6 px-6 py-4">
+              <div>
                 <p class="font-medium text-red-700">Reset All Data</p>
-                <p class="text-sm text-gray-500">Delete all tasks, terms, and Layer 2 data. Cannot be undone!</p>
+                <p class="text-sm text-gray-500">Delete ALL data from Layer 1, 2, and 3. Cannot be undone!</p>
               </div>
               <button @click="resetConfirm = true" class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition">
-                🗑️ Reset
+                🗑️ Reset All
               </button>
             </div>
           </div>
@@ -648,11 +730,17 @@ const getStatusColor = (status) => {
         <!-- Reset Confirmation Modal -->
         <div v-if="resetConfirm" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div class="bg-white rounded-xl shadow-2xl p-6 max-w-md mx-4">
-            <h3 class="text-xl font-bold text-red-700 mb-4">⚠️ Confirm Reset</h3>
-            <p class="text-gray-600 mb-4">This will permanently delete ALL data including Layer 1 terms, Layer 2 reports, and alignments.</p>
+            <h3 class="text-xl font-bold text-red-700 mb-4">⚠️ Confirm Reset All Data</h3>
+            <p class="text-gray-600 mb-3">This will permanently delete ALL data from:</p>
+            <ul class="text-sm text-gray-700 mb-4 space-y-1">
+              <li>📚 <strong>Layer 1:</strong> Terms & bilingual definitions</li>
+              <li>📊 <strong>Layer 2:</strong> Policy reports & alignments</li>
+              <li>📰 <strong>Layer 3:</strong> News articles & sentiment annotations</li>
+            </ul>
+            <p class="text-red-600 text-sm font-medium mb-4">This action cannot be undone!</p>
             <div class="flex gap-3">
               <button @click="resetAllData" :disabled="resetting" class="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50">
-                {{ resetting ? 'Resetting...' : 'Yes, Reset' }}
+                {{ resetting ? 'Resetting...' : 'Delete Everything' }}
               </button>
               <button @click="resetConfirm = false" :disabled="resetting" class="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300">
                 Cancel

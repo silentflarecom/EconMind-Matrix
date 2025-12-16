@@ -305,33 +305,81 @@ async def delete_task(task_id: int) -> bool:
         return True
 
 async def reset_database() -> dict:
-    """Reset database - delete all data but keep structure"""
+    """Reset database - delete all data from ALL layers but keep structure"""
     async with aiosqlite.connect(DATABASE_FILE) as db:
-        # Get counts before deletion
+        result = {}
+        
+        # ========== Layer 1: Terminology ==========
         cursor = await db.execute("SELECT COUNT(*) FROM batch_tasks")
-        task_count = (await cursor.fetchone())[0]
+        result['layer1_tasks'] = (await cursor.fetchone())[0]
         
         cursor = await db.execute("SELECT COUNT(*) FROM terms")
-        term_count = (await cursor.fetchone())[0]
+        result['layer1_terms'] = (await cursor.fetchone())[0]
         
         cursor = await db.execute("SELECT COUNT(*) FROM term_associations")
-        assoc_count = (await cursor.fetchone())[0]
+        result['layer1_associations'] = (await cursor.fetchone())[0]
         
-        # Delete all data
+        # Delete Layer 1 data
         await db.execute("DELETE FROM term_associations")
         await db.execute("DELETE FROM terms")
         await db.execute("DELETE FROM batch_tasks")
         
-        # Reset auto-increment counters
-        await db.execute("DELETE FROM sqlite_sequence WHERE name IN ('batch_tasks', 'terms', 'term_associations')")
+        # ========== Layer 2: Policy Corpus ==========
+        try:
+            cursor = await db.execute("SELECT COUNT(*) FROM policy_reports")
+            result['layer2_reports'] = (await cursor.fetchone())[0]
+            
+            cursor = await db.execute("SELECT COUNT(*) FROM policy_paragraphs")
+            result['layer2_paragraphs'] = (await cursor.fetchone())[0]
+            
+            cursor = await db.execute("SELECT COUNT(*) FROM policy_alignments")
+            result['layer2_alignments'] = (await cursor.fetchone())[0]
+            
+            # Delete Layer 2 data
+            await db.execute("DELETE FROM policy_alignments")
+            await db.execute("DELETE FROM policy_paragraphs")
+            await db.execute("DELETE FROM policy_reports")
+        except Exception as e:
+            result['layer2_reports'] = 0
+            result['layer2_paragraphs'] = 0
+            result['layer2_alignments'] = 0
+            print(f"Layer 2 tables not found or error: {e}")
+        
+        # ========== Layer 3: Sentiment Corpus ==========
+        try:
+            cursor = await db.execute("SELECT COUNT(*) FROM news_articles")
+            result['layer3_articles'] = (await cursor.fetchone())[0]
+            
+            cursor = await db.execute("SELECT COUNT(*) FROM sentiment_annotations")
+            result['layer3_annotations'] = (await cursor.fetchone())[0]
+            
+            # Delete Layer 3 data
+            await db.execute("DELETE FROM sentiment_annotations")
+            await db.execute("DELETE FROM news_articles")
+        except Exception as e:
+            result['layer3_articles'] = 0
+            result['layer3_annotations'] = 0
+            print(f"Layer 3 tables not found or error: {e}")
+        
+        # Reset auto-increment counters for all tables
+        await db.execute("""
+            DELETE FROM sqlite_sequence 
+            WHERE name IN (
+                'batch_tasks', 'terms', 'term_associations',
+                'policy_reports', 'policy_paragraphs', 'policy_alignments',
+                'news_articles', 'sentiment_annotations'
+            )
+        """)
         
         await db.commit()
         
-        return {
-            "deleted_tasks": task_count,
-            "deleted_terms": term_count,
-            "deleted_associations": assoc_count
-        }
+        # Calculate totals
+        result['total_layer1_deleted'] = result['layer1_tasks'] + result['layer1_terms'] + result['layer1_associations']
+        result['total_layer2_deleted'] = result['layer2_reports'] + result['layer2_paragraphs'] + result['layer2_alignments']
+        result['total_layer3_deleted'] = result['layer3_articles'] + result['layer3_annotations']
+        result['total_deleted'] = result['total_layer1_deleted'] + result['total_layer2_deleted'] + result['total_layer3_deleted']
+        
+        return result
 
 async def get_corpus_statistics() -> dict:
     """Get overall corpus statistics"""

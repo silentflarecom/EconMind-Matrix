@@ -648,6 +648,21 @@ async def health_check():
     }
 
 
+@policy_router.get("/backup")
+async def backup_database():
+    """Download Layer 2 database for backup."""
+    from fastapi.responses import FileResponse
+    
+    if not DB_PATH.exists():
+        raise HTTPException(404, "Database file not found")
+    
+    return FileResponse(
+        path=str(DB_PATH),
+        filename="policy_corpus.db",
+        media_type="application/octet-stream"
+    )
+
+
 # Create FastAPI application for standalone testing
 if __name__ == "__main__":
     import uvicorn

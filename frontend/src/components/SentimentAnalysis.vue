@@ -138,6 +138,23 @@
       <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
         <h3 class="text-lg font-semibold mb-4">📡 Crawl International News Sources</h3>
         
+        <!-- Running Crawler Detection Warning -->
+        <div v-if="detectedRunningCrawl && !crawling" class="mb-6 bg-yellow-50 border-2 border-yellow-400 rounded-xl p-4">
+          <div class="flex items-center gap-4">
+            <span class="text-4xl">⚠️</span>
+            <div class="flex-1">
+              <h4 class="font-bold text-yellow-800">Crawler Already Running!</h4>
+              <p class="text-yellow-700 text-sm">A crawler was detected running in the background. This may be from a previous session.</p>
+            </div>
+            <button 
+              @click="forceStopCrawl"
+              class="px-4 py-2 bg-red-500 text-white font-semibold rounded-lg hover:bg-red-600 transition-all"
+            >
+              ⏹ Force Stop
+            </button>
+          </div>
+        </div>
+        
         <!-- Crawling Progress Animation -->
         <div v-if="crawling" class="mb-6 bg-gradient-to-r from-amber-50 to-orange-50 border-2 border-amber-300 rounded-xl p-6">
           <div class="flex items-center gap-4 mb-4">
@@ -261,6 +278,25 @@
             class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500"
           />
           <p class="text-xs text-gray-500 mt-1">Filter articles by keywords (comma-separated)</p>
+        </div>
+
+        <!-- Proxy Pool Configuration -->
+        <div class="mb-4">
+          <div class="flex items-center justify-between mb-1">
+            <label class="block text-sm font-medium text-gray-700">Proxy Pool (optional)</label>
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" v-model="useProxy" class="w-4 h-4 text-amber-600" />
+              <span class="text-xs text-gray-600">Enable Proxies</span>
+            </label>
+          </div>
+          <textarea 
+            v-model="proxyList" 
+            :disabled="!useProxy"
+            placeholder="http://proxy1:8080&#10;socks5://user:pass@proxy2:1080&#10;http://192.168.1.100:3128"
+            rows="3"
+            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 font-mono text-sm disabled:bg-gray-100 disabled:text-gray-400"
+          ></textarea>
+          <p class="text-xs text-gray-500 mt-1">One proxy per line. Supports http/https/socks5. Format: protocol://[user:pass@]host:port</p>
         </div>
 
         <!-- Start/Stop Buttons -->
@@ -816,6 +852,9 @@ const crawlStatusMessage = ref('Initializing...')
 const crawlConcurrency = ref(3)
 const crawlDelay = ref(1.0)
 const crawlRotateUA = ref(true)
+const useProxy = ref(false)
+const proxyList = ref('')
+const detectedRunningCrawl = ref(false)
 
 // Annotate state
 const annotateMethod = ref('auto')
@@ -1067,6 +1106,14 @@ const startCrawl = async () => {
       crawlKeywords.value.split(',').forEach(k => params.append('keywords', k.trim()))
     }
     
+    // Add proxies if enabled
+    if (useProxy.value && proxyList.value.trim()) {
+      proxyList.value.split('\n').filter(p => p.trim()).forEach(p => params.append('proxies', p.trim()))
+    }
+    
+    // Clear detected running crawl flag since we're starting our own
+    detectedRunningCrawl.value = false
+    
     const response = await axios.post(`${API_BASE}/crawl?${params.toString()}`)
     
     if (!response.data.success) {
@@ -1125,9 +1172,44 @@ const stopCrawl = async () => {
     crawlStatusMessage.value = 'Stopping crawl...'
     const response = await axios.post(`${API_BASE}/crawl/stop`)
     crawlMessage.value = response.data.message || 'Stop signal sent'
+    
+    // Verify stop with polling (up to 15 seconds)
+    let attempts = 0
+    const verifyStop = async () => {
+      try {
+        const statusRes = await axios.get(`${API_BASE}/crawl/status`)
+        if (!statusRes.data.status?.is_crawling) {
+          crawling.value = false
+          crawlProgress.value = 100
+          crawlMessage.value = '✅ Crawler stopped successfully'
+          crawlStatusMessage.value = 'Stopped'
+          loadStats()
+          loadRecentArticles()
+          return
+        }
+        
+        attempts++
+        crawlStatusMessage.value = `Stopping... (${attempts}/15)`
+        
+        if (attempts < 15) {
+          setTimeout(verifyStop, 1000)
+        } else {
+          crawlMessage.value = '⚠ Crawler might still be finishing current source. Check status again.'
+          crawlError.value = true
+        }
+      } catch (error) {
+        // If can't get status, assume stopped
+        crawling.value = false
+        crawlMessage.value = 'Crawler status unknown. Assuming stopped.'
+      }
+    }
+    
+    setTimeout(verifyStop, 1000)
+    
   } catch (error) {
     console.error('Failed to stop crawl:', error)
     crawlMessage.value = 'Failed to send stop signal'
+    crawlError.value = true
   }
 }
 
@@ -1247,6 +1329,17 @@ const getTrendDirectionEmoji = (direction) => {
 
 // Lifecycle
 onMounted(async () => {
+  // Check if a crawler is already running (from previous session)
+  try {
+    const statusRes = await axios.get(`${API_BASE}/crawl/status`)
+    if (statusRes.data.status?.is_crawling) {
+      detectedRunningCrawl.value = true
+      console.warn('⚠ Detected running crawler from previous session')
+    }
+  } catch (error) {
+    console.log('Could not check crawler status')
+  }
+  
   await Promise.all([
     loadStats(),
     loadSources(),
@@ -1255,10 +1348,49 @@ onMounted(async () => {
   ])
 })
 
+// Force stop crawler (for detected running crawls)
+const forceStopCrawl = async () => {
+  try {
+    await axios.post(`${API_BASE}/crawl/stop`)
+    
+    // Verify stop with polling (up to 10 seconds)
+    let attempts = 0
+    const verifyStop = async () => {
+      const statusRes = await axios.get(`${API_BASE}/crawl/status`)
+      if (!statusRes.data.status?.is_crawling) {
+        detectedRunningCrawl.value = false
+        crawlMessage.value = '✅ Crawler stopped successfully'
+        return
+      }
+      attempts++
+      if (attempts < 10) {
+        setTimeout(verifyStop, 1000)
+      } else {
+        crawlMessage.value = '⚠ Crawler may still be running. Refresh page to check.'
+        crawlError.value = true
+      }
+    }
+    setTimeout(verifyStop, 1000)
+  } catch (error) {
+    console.error('Failed to force stop crawler:', error)
+    crawlMessage.value = 'Failed to stop crawler'
+    crawlError.value = true
+  }
+}
+
 // Watch for tab changes - auto-refresh articles when switching to articles tab
-watch(activeTab, (newTab) => {
+watch(activeTab, async (newTab) => {
   if (newTab === 'articles') {
     loadArticles()
+  }
+  // Check crawler status when switching to crawl tab
+  if (newTab === 'crawl') {
+    try {
+      const statusRes = await axios.get(`${API_BASE}/crawl/status`)
+      if (statusRes.data.status?.is_crawling && !crawling.value) {
+        detectedRunningCrawl.value = true
+      }
+    } catch (error) {}
   }
 })
 </script>
