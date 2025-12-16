@@ -299,40 +299,109 @@ TERM_VARIANTS = {
 }
 
 
+# User-Agent pool for rotation
+USER_AGENTS = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Safari/605.1.15",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:121.0) Gecko/20100101 Firefox/121.0",
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 17_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1",
+]
+
 class NewsCrawler:
     """
-    Crawls financial news from various RSS feeds asynchronously.
+    Advanced News Crawler with:
+    - User-Agent rotation
+    - Proxy pool support
+    - Concurrency control
+    - Custom delay
+    - Manual start/stop
     """
     
     def __init__(
         self,
         sources: List[str] = None,
-        user_agent: str = "EconMindMatrix/1.0 (Financial News Aggregator)"
+        proxies: List[str] = None,
+        max_concurrent: int = 3,
+        delay_seconds: float = 1.0,
+        rotate_user_agent: bool = True
     ):
         """
-        Initialize crawler with specific sources.
+        Initialize crawler with advanced options.
         
         Args:
             sources: List of source keys from NEWS_SOURCES
-                    If None, uses all available sources with RSS
-            user_agent: User-Agent header for requests
+            proxies: List of proxy URLs (e.g., ["http://proxy1:8080", "socks5://proxy2:1080"])
+            max_concurrent: Maximum concurrent requests (1-10)
+            delay_seconds: Delay between requests in seconds (0.5-10)
+            rotate_user_agent: Whether to rotate User-Agent for each request
         """
         if sources is None:
-            # Use all sources that have RSS feeds
             self.sources = [k for k, v in NEWS_SOURCES.items() if v.get("rss_urls")]
         else:
             self.sources = [s for s in sources if s in NEWS_SOURCES]
         
-        self.user_agent = user_agent
+        self.proxies = proxies or []
+        self.max_concurrent = max(1, min(10, max_concurrent))
+        self.delay_seconds = max(0.5, min(10, delay_seconds))
+        self.rotate_user_agent = rotate_user_agent
+        
+        # State
         self._session = None
+        self._is_running = False
+        self._should_stop = False
+        self._current_proxy_idx = 0
+        self._crawl_stats = {
+            "articles_found": 0,
+            "sources_completed": 0,
+            "current_source": None,
+            "errors": [],
+            "started_at": None,
+            "stopped_at": None
+        }
+        self._semaphore = None
+    
+    def _get_user_agent(self) -> str:
+        """Get a random User-Agent from the pool."""
+        import random
+        if self.rotate_user_agent:
+            return random.choice(USER_AGENTS)
+        return USER_AGENTS[0]
+    
+    def _get_proxy(self) -> Optional[str]:
+        """Get next proxy from pool (round-robin)."""
+        if not self.proxies:
+            return None
+        proxy = self.proxies[self._current_proxy_idx % len(self.proxies)]
+        self._current_proxy_idx += 1
+        return proxy
+    
+    @property
+    def is_running(self) -> bool:
+        return self._is_running
+    
+    @property
+    def stats(self) -> dict:
+        return self._crawl_stats.copy()
+    
+    def stop(self):
+        """Signal the crawler to stop after current operation."""
+        self._should_stop = True
+        self._crawl_stats["stopped_at"] = datetime.now().isoformat()
+        print("⏹ Crawler stop requested...")
     
     async def _get_session(self):
-        """Get or create aiohttp session."""
+        """Get or create aiohttp session with current User-Agent."""
         if self._session is None and AIOHTTP_AVAILABLE:
             import aiohttp
+            connector = aiohttp.TCPConnector(limit=self.max_concurrent, ssl=False)
             self._session = aiohttp.ClientSession(
-                headers={"User-Agent": self.user_agent},
-                timeout=aiohttp.ClientTimeout(total=30)
+                headers={"User-Agent": self._get_user_agent()},
+                timeout=aiohttp.ClientTimeout(total=30),
+                connector=connector
             )
         return self._session
     
@@ -341,6 +410,7 @@ class NewsCrawler:
         if self._session:
             await self._session.close()
             self._session = None
+        self._is_running = False
     
     def _parse_date(self, entry: Dict) -> Optional[datetime]:
         """Parse date from RSS entry."""
@@ -391,6 +461,10 @@ class NewsCrawler:
         Returns:
             List of NewsArticle objects
         """
+        # Check stop signal
+        if self._should_stop:
+            return []
+            
         if not FEEDPARSER_AVAILABLE:
             print(f"⚠ Cannot crawl {source_key}: feedparser not installed")
             return []
@@ -400,16 +474,22 @@ class NewsCrawler:
             return []
         
         articles = []
+        user_agent = self._get_user_agent()
+        
+        self._crawl_stats["current_source"] = source_key
         
         for rss_url in source["rss_urls"]:
+            # Check stop signal before each URL
+            if self._should_stop:
+                break
+                
             try:
-                # feedparser can fetch directly, with custom headers
-                # Note: feedparser automatically handles SSL gracefully
+                # Use rotating User-Agent
                 feed = feedparser.parse(
                     rss_url,
-                    agent=self.user_agent,
+                    agent=user_agent,
                     request_headers={
-                        'User-Agent': self.user_agent,
+                        'User-Agent': user_agent,
                         'Accept': 'application/rss+xml, application/xml, text/xml',
                     }
                 )
@@ -417,13 +497,12 @@ class NewsCrawler:
                 # Check for errors
                 if hasattr(feed, 'status') and feed.status >= 400:
                     print(f"⚠ HTTP {feed.status} for {source_key}: {rss_url}")
+                    self._crawl_stats["errors"].append(f"{source_key}: HTTP {feed.status}")
                     continue
                 
                 if feed.bozo and feed.bozo_exception:
-                    # Log warning but continue - some feeds have minor issues
                     error_type = type(feed.bozo_exception).__name__
                     print(f"⚠ RSS parse warning for {source_key} ({error_type}): {str(feed.bozo_exception)[:100]}")
-                    # Only skip if there are no entries
                     if not feed.entries:
                         continue
                 
@@ -436,7 +515,6 @@ class NewsCrawler:
                     url = entry.get('link', '')
                     published_date = self._parse_date(entry)
                     
-                    # Detect related terms
                     text_for_analysis = f"{title} {summary}"
                     related_terms = detect_related_terms(text_for_analysis, source.get("language", "en"))
                     
@@ -454,19 +532,23 @@ class NewsCrawler:
                 if articles:
                     print(f"  ✓ Fetched {len(articles)} articles from {rss_url[:50]}...")
                 
+                # Apply delay between requests
+                await asyncio.sleep(self.delay_seconds)
+                
             except Exception as e:
                 error_msg = str(e)
-                # Provide helpful message for common errors
                 if "SSL" in error_msg or "CERTIFICATE" in error_msg:
-                    print(f"✗ SSL error for {source_key}: {rss_url[:60]}... (This source may require https access or has certificate issues)")
+                    print(f"✗ SSL error for {source_key}: {rss_url[:60]}...")
                 elif "timeout" in error_msg.lower():
                     print(f"✗ Timeout for {source_key}: {rss_url[:60]}...")
                 elif "403" in error_msg or "forbidden" in error_msg.lower():
-                    print(f"✗ Access forbidden for {source_key}: {rss_url[:60]}... (May require subscription)")
+                    print(f"✗ Access forbidden for {source_key}: {rss_url[:60]}...")
                 else:
                     print(f"✗ Error crawling {source_key}: {error_msg[:100]}")
+                self._crawl_stats["errors"].append(f"{source_key}: {error_msg[:50]}")
                 continue
         
+        self._crawl_stats["articles_found"] += len(articles)
         return articles
     
     async def crawl_all(
@@ -486,11 +568,28 @@ class NewsCrawler:
         Returns:
             List of NewsArticle objects, sorted by date (newest first)
         """
+        # Initialize state
+        self._is_running = True
+        self._should_stop = False
+        self._crawl_stats = {
+            "articles_found": 0,
+            "sources_completed": 0,
+            "current_source": None,
+            "errors": [],
+            "started_at": datetime.now().isoformat(),
+            "stopped_at": None
+        }
+        
         all_articles = []
         cutoff_date = datetime.now() - timedelta(days=days_back)
         
         # Crawl each source
-        for source_key in self.sources:
+        for i, source_key in enumerate(self.sources):
+            # Check stop signal
+            if self._should_stop:
+                print(f"⏹ Crawl stopped by user after {i} sources")
+                break
+                
             try:
                 print(f"📰 Crawling {NEWS_SOURCES[source_key]['name']}...")
                 articles = await self.crawl_rss(source_key)
@@ -502,16 +601,15 @@ class NewsCrawler:
                 articles = articles[:limit_per_source]
                 
                 all_articles.extend(articles)
+                self._crawl_stats["sources_completed"] = i + 1
                 print(f"  ✓ Found {len(articles)} articles from {source_key}")
-                
-                # Small delay between sources to be polite
-                await asyncio.sleep(1)
                 
             except Exception as e:
                 print(f"✗ Error crawling {source_key}: {e}")
+                self._crawl_stats["errors"].append(f"{source_key}: {str(e)[:50]}")
         
         # Filter by keywords if specified
-        if keywords:
+        if keywords and not self._should_stop:
             keywords_lower = [k.lower() for k in keywords]
             all_articles = [
                 article for article in all_articles
@@ -520,6 +618,10 @@ class NewsCrawler:
         
         # Sort by date (newest first)
         all_articles.sort(key=lambda x: x.published_date or datetime.min, reverse=True)
+        
+        # Update final stats
+        self._is_running = False
+        self._crawl_stats["articles_found"] = len(all_articles)
         
         return all_articles
     

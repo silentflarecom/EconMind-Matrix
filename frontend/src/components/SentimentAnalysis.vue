@@ -212,7 +212,7 @@
         </div>
 
         <!-- Crawl Options -->
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Days Back</label>
             <input 
@@ -220,42 +220,89 @@
               v-model="crawlDaysBack" 
               min="1" 
               max="30"
-              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+              class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500"
             />
-            <p class="text-xs text-gray-500 mt-1">Fetch news from the last N days (1-30)</p>
           </div>
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Keywords (optional)</label>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Concurrency</label>
             <input 
-              type="text" 
-              v-model="crawlKeywords" 
-              placeholder="inflation, fed, rate cut"
-              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+              type="number" 
+              v-model="crawlConcurrency" 
+              min="1" 
+              max="10"
+              class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500"
             />
-            <p class="text-xs text-gray-500 mt-1">Filter articles by keywords (comma-separated)</p>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Delay (sec)</label>
+            <input 
+              type="number" 
+              v-model="crawlDelay" 
+              min="0.5" 
+              max="10"
+              step="0.5"
+              class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500"
+            />
+          </div>
+          <div class="flex items-end">
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" v-model="crawlRotateUA" class="w-4 h-4 text-amber-600" />
+              <span class="text-sm text-gray-700">Rotate User-Agent</span>
+            </label>
           </div>
         </div>
+        
+        <div class="mb-4">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Keywords (optional)</label>
+          <input 
+            type="text" 
+            v-model="crawlKeywords" 
+            placeholder="inflation, fed, rate cut"
+            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500"
+          />
+          <p class="text-xs text-gray-500 mt-1">Filter articles by keywords (comma-separated)</p>
+        </div>
 
-        <button
-          @click="startCrawl"
-          :disabled="crawling || selectedSources.length === 0"
-          class="w-full py-3 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-semibold rounded-lg hover:from-amber-600 hover:to-orange-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg hover:shadow-xl"
-        >
-          <span v-if="crawling" class="flex items-center justify-center gap-2">
-            <span class="animate-pulse">⏳</span>
-            <span>Crawling in progress...</span>
-          </span>
-          <span v-else class="flex items-center justify-center gap-2">
-            <span>🚀</span>
-            <span>Start Crawl ({{ selectedSources.length }} sources)</span>
-          </span>
-        </button>
+        <!-- Start/Stop Buttons -->
+        <div class="flex gap-4">
+          <button
+            v-if="!crawling"
+            @click="startCrawl"
+            :disabled="selectedSources.length === 0"
+            class="flex-1 py-3 bg-gradient-to-r from-green-500 to-emerald-500 text-white font-semibold rounded-lg hover:from-green-600 hover:to-emerald-600 disabled:opacity-50 transition-all shadow-lg"
+          >
+            <span class="flex items-center justify-center gap-2">
+              <span>▶️</span>
+              <span>Start Crawl ({{ selectedSources.length }} sources)</span>
+            </span>
+          </button>
+          
+          <button
+            v-if="crawling"
+            @click="stopCrawl"
+            class="flex-1 py-3 bg-gradient-to-r from-red-500 to-rose-500 text-white font-semibold rounded-lg hover:from-red-600 hover:to-rose-600 transition-all shadow-lg"
+          >
+            <span class="flex items-center justify-center gap-2">
+              <span>⏹</span>
+              <span>Stop Crawl</span>
+            </span>
+          </button>
+        </div>
 
-        <div v-if="crawlMessage" class="mt-4 p-4 rounded-lg" :class="crawlError ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-green-50 text-green-700 border border-green-200'">
-          <div class="flex items-start gap-2">
-            <span class="text-lg">{{ crawlError ? '❌' : '✅' }}</span>
-            <span>{{ crawlMessage }}</span>
+        <!-- Status Display -->
+        <div v-if="crawling || crawlMessage" class="mt-4 p-4 rounded-lg border" :class="crawlError ? 'bg-red-50 border-red-200' : 'bg-amber-50 border-amber-200'">
+          <div class="flex items-center justify-between mb-2">
+            <span class="font-medium" :class="crawlError ? 'text-red-700' : 'text-amber-800'">
+              {{ crawlError ? '❌ Error' : (crawling ? '🔄 Crawling...' : '✅ Done') }}
+            </span>
+            <span v-if="crawling" class="text-sm text-amber-600">
+              {{ crawlProgress }}% ({{ crawlStatusMessage }})
+            </span>
           </div>
+          <div v-if="crawling" class="h-2 bg-amber-200 rounded-full overflow-hidden mb-2">
+            <div class="h-full bg-amber-500 transition-all" :style="{width: crawlProgress + '%'}"></div>
+          </div>
+          <p class="text-sm" :class="crawlError ? 'text-red-600' : 'text-amber-700'">{{ crawlMessage }}</p>
         </div>
       </div>
 
@@ -580,6 +627,90 @@
       </div>
     </div>
 
+    <!-- Tasks Tab -->
+    <div v-if="activeTab === 'tasks'" class="space-y-6">
+      <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+        <h3 class="text-lg font-semibold mb-4">📋 Task Manager</h3>
+        
+        <!-- Active Task -->
+        <div v-if="currentTask" class="mb-6 bg-gradient-to-r from-amber-50 to-orange-50 border-2 border-amber-300 rounded-xl p-6">
+          <div class="flex items-center gap-4 mb-4">
+            <div class="relative">
+              <div class="w-16 h-16 border-4 border-amber-200 border-t-amber-600 rounded-full animate-spin"></div>
+              <div class="absolute inset-0 flex items-center justify-center text-2xl">
+                {{ currentTask.type === 'crawl' ? '📰' : '🤖' }}
+              </div>
+            </div>
+            <div class="flex-1">
+              <h4 class="text-lg font-bold text-amber-900">{{ currentTask.name }}</h4>
+              <p class="text-amber-700 text-sm">{{ currentTask.message }}</p>
+            </div>
+            <div class="text-right">
+              <div class="text-3xl font-bold text-amber-600">{{ currentTask.progress }}%</div>
+            </div>
+          </div>
+          
+          <div class="space-y-2">
+            <div class="h-4 bg-amber-200 rounded-full overflow-hidden">
+              <div 
+                class="h-full bg-gradient-to-r from-amber-500 to-orange-500 transition-all duration-500 rounded-full"
+                :style="{width: currentTask.progress + '%'}"
+              ></div>
+            </div>
+            
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4 text-sm">
+              <div class="bg-white/50 rounded-lg p-3">
+                <div class="text-gray-500">Current Source</div>
+                <div class="font-semibold">{{ currentTask.currentSource || '-' }}</div>
+              </div>
+              <div class="bg-white/50 rounded-lg p-3">
+                <div class="text-gray-500">Sources Progress</div>
+                <div class="font-semibold">{{ currentTask.completedSources }} / {{ currentTask.totalSources }}</div>
+              </div>
+              <div class="bg-white/50 rounded-lg p-3">
+                <div class="text-gray-500">Articles Found</div>
+                <div class="font-semibold">{{ currentTask.articlesFound || 0 }}</div>
+              </div>
+              <div class="bg-white/50 rounded-lg p-3">
+                <div class="text-gray-500">Started At</div>
+                <div class="font-semibold">{{ formatTime(currentTask.startedAt) }}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- No Active Task -->
+        <div v-else class="mb-6 bg-gray-50 border-2 border-gray-200 border-dashed rounded-xl p-8 text-center">
+          <div class="text-6xl mb-4">😴</div>
+          <p class="text-gray-500 text-lg">No active tasks</p>
+          <p class="text-gray-400 text-sm mt-2">Start a crawl or annotation from the "Crawl News" tab</p>
+        </div>
+        
+        <!-- Task History -->
+        <h4 class="font-semibold text-gray-700 mb-3">📜 Task History</h4>
+        <div v-if="taskHistory.length === 0" class="text-gray-500 text-center py-8">
+          No task history yet.
+        </div>
+        <div v-else class="space-y-3">
+          <div 
+            v-for="task in taskHistory.slice(0, 10)" 
+            :key="task.id"
+            class="flex items-center gap-4 p-4 bg-gray-50 rounded-lg"
+          >
+            <span class="text-2xl">{{ task.success ? '✅' : '❌' }}</span>
+            <div class="flex-1">
+              <div class="font-medium">{{ task.name }}</div>
+              <div class="text-sm text-gray-500">{{ task.message }}</div>
+            </div>
+            <div class="text-right text-sm text-gray-400">
+              <div>{{ formatTime(task.completedAt) }}</div>
+              <div v-if="task.articlesFound">{{ task.articlesFound }} articles</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Export Tab -->
     <div v-if="activeTab === 'export'" class="space-y-6">
       <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
@@ -682,6 +813,9 @@ const crawlMessage = ref('')
 const crawlError = ref(false)
 const crawlProgress = ref(0)
 const crawlStatusMessage = ref('Initializing...')
+const crawlConcurrency = ref(3)
+const crawlDelay = ref(1.0)
+const crawlRotateUA = ref(true)
 
 // Annotate state
 const annotateMethod = ref('auto')
@@ -799,9 +933,9 @@ const loadSources = async () => {
 const loadArticles = async () => {
   loadingArticles.value = true
   try {
-    let url = `${API_BASE}/articles?limit=200`  // Increased limit for grouping
+    let url = `${API_BASE}/articles?limit=500`  // Increased limit to load all articles
     if (filterSentiment.value) {
-      url = `${API_BASE}/annotations?sentiment_label=${filterSentiment.value}&limit=200`
+      url = `${API_BASE}/annotations?sentiment_label=${filterSentiment.value}&limit=500`
     }
     if (filterSource.value) {
       url += `&source=${filterSource.value}`
@@ -815,9 +949,8 @@ const loadArticles = async () => {
       annotation: { sentiment: { label: a.sentiment?.label, score: a.sentiment?.score } }
     })) || []
     
-    // Auto-expand first 3 source groups
-    const sources = [...new Set(articles.value.map(a => a.source))].slice(0, 3)
-    expandedSources.value = sources
+    // Default: keep all groups collapsed (empty array)
+    expandedSources.value = []
   } catch (error) {
     console.error('Failed to load articles:', error)
   } finally {
@@ -926,6 +1059,10 @@ const startCrawl = async () => {
     const params = new URLSearchParams()
     selectedSources.value.forEach(s => params.append('sources', s))
     params.append('days_back', crawlDaysBack.value)
+    params.append('max_concurrent', crawlConcurrency.value)
+    params.append('delay_seconds', crawlDelay.value)
+    params.append('rotate_ua', crawlRotateUA.value)
+    
     if (crawlKeywords.value) {
       crawlKeywords.value.split(',').forEach(k => params.append('keywords', k.trim()))
     }
@@ -934,6 +1071,7 @@ const startCrawl = async () => {
     
     if (!response.data.success) {
       crawlMessage.value = response.data.message || 'Crawl already in progress'
+      crawling.value = false
       return
     }
     
@@ -948,6 +1086,7 @@ const startCrawl = async () => {
         
         crawlProgress.value = progress
         crawlStatusMessage.value = status.message || 'Crawling...'
+        crawlMessage.value = `${status.completed_sources}/${status.total_sources} sources • ${status.articles_found} articles found`
         
         // If still crawling, continue polling
         if (status.is_crawling) {
@@ -964,14 +1103,13 @@ const startCrawl = async () => {
         }
       } catch (error) {
         console.error('Failed to get crawl status:', error)
-        // Continue polling on error
         if (crawling.value) {
           setTimeout(pollStatus, 2000)
         }
       }
     }
     
-    // Start polling after a short delay
+    // Start polling
     setTimeout(pollStatus, 500)
     
   } catch (error) {
@@ -979,6 +1117,17 @@ const startCrawl = async () => {
     crawlMessage.value = error.response?.data?.detail || 'Failed to start crawl'
     crawlProgress.value = 0
     crawling.value = false
+  }
+}
+
+const stopCrawl = async () => {
+  try {
+    crawlStatusMessage.value = 'Stopping crawl...'
+    const response = await axios.post(`${API_BASE}/crawl/stop`)
+    crawlMessage.value = response.data.message || 'Stop signal sent'
+  } catch (error) {
+    console.error('Failed to stop crawl:', error)
+    crawlMessage.value = 'Failed to send stop signal'
   }
 }
 

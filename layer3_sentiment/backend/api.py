@@ -72,6 +72,9 @@ DB_PATH = Path("./corpus.db")
 # Initialize components
 db = SentimentDatabase(str(DB_PATH))
 
+# Global crawler instance for start/stop control
+active_crawler = None
+
 # Crawl status tracking (for progress monitoring)
 crawl_status = {
     "is_crawling": False,
@@ -132,14 +135,23 @@ async def crawl_news(
     background_tasks: BackgroundTasks,
     sources: List[str] = Query(default=["reuters", "wsj"]),
     days_back: int = Query(default=7, ge=1, le=30),
-    keywords: Optional[List[str]] = Query(default=None)
+    keywords: Optional[List[str]] = Query(default=None),
+    max_concurrent: int = Query(default=3, ge=1, le=10),
+    delay_seconds: float = Query(default=1.0, ge=0.5, le=10),
+    rotate_ua: bool = Query(default=True)
 ):
     """
-    Crawl news from specified sources.
+    Start crawling news from specified sources.
     
-    The crawl runs in the background. Use GET /crawl/status to monitor progress.
+    New options:
+    - max_concurrent: Maximum concurrent requests (1-10)
+    - delay_seconds: Delay between requests (0.5-10 seconds)
+    - rotate_ua: Whether to rotate User-Agent for each request
+    
+    Use POST /crawl/stop to stop the crawl.
+    Use GET /crawl/status to monitor progress.
     """
-    global crawl_status
+    global crawl_status, active_crawler
     
     if NewsCrawler is None:
         raise HTTPException(500, "News crawler not available. Check dependencies.")
@@ -148,7 +160,7 @@ async def crawl_news(
     if crawl_status["is_crawling"]:
         return {
             "success": False,
-            "message": "A crawl is already in progress",
+            "message": "A crawl is already in progress. Use /crawl/stop to stop it first.",
             "status": crawl_status
         }
     
@@ -171,24 +183,36 @@ async def crawl_news(
     })
     
     async def do_crawl():
-        global crawl_status
-        crawler = NewsCrawler(sources=valid_sources)
-        total_articles = []
+        global crawl_status, active_crawler
+        
+        # Create crawler with new options
+        active_crawler = NewsCrawler(
+            sources=valid_sources,
+            max_concurrent=max_concurrent,
+            delay_seconds=delay_seconds,
+            rotate_user_agent=rotate_ua
+        )
         
         try:
             for i, source_key in enumerate(valid_sources):
+                # Check if stop was requested
+                if active_crawler._should_stop:
+                    crawl_status["message"] = f"Stopped by user after {i} sources"
+                    break
+                    
                 crawl_status["current_source"] = source_key
                 crawl_status["message"] = f"Crawling {NEWS_SOURCES.get(source_key, {}).get('name', source_key)}..."
                 
                 print(f"📰 Crawling {source_key}...")
                 
-                articles = await crawler.crawl_rss(source_key)
+                articles = await active_crawler.crawl_rss(source_key)
                 
-                # Filter by date and keywords
+                # Filter by date
                 from datetime import datetime, timedelta
                 cutoff = datetime.now() - timedelta(days=days_back)
                 articles = [a for a in articles if not a.published_date or a.published_date >= cutoff]
                 
+                # Filter by keywords
                 if keywords:
                     keywords_lower = [k.lower() for k in keywords]
                     articles = [a for a in articles if any(
@@ -196,23 +220,25 @@ async def crawl_news(
                         for kw in keywords_lower
                     )]
                 
-                total_articles.extend(articles)
-                crawl_status["articles_found"] = len(total_articles)
+                # Insert to DB immediately (incremental)
+                if articles:
+                    inserted_ids = await db.insert_articles_batch(articles)
+                    crawl_status["articles_found"] += len(articles)
+                    crawl_status["articles_inserted"] += len(inserted_ids)
+                    print(f"  ✓ Found {len(articles)} articles, inserted {len(inserted_ids)} new")
+                
                 crawl_status["completed_sources"] = i + 1
             
-            # Insert into database
-            crawl_status["message"] = "Saving articles to database..."
-            inserted_ids = await db.insert_articles_batch(total_articles)
-            crawl_status["articles_inserted"] = len(inserted_ids)
-            crawl_status["message"] = f"Completed! {len(total_articles)} articles found, {len(inserted_ids)} new"
-            
-            print(f"✓ Crawled {len(total_articles)} articles, inserted {len(inserted_ids)} new")
+            if not active_crawler._should_stop:
+                crawl_status["message"] = f"Completed! {crawl_status['articles_found']} articles, {crawl_status['articles_inserted']} new"
             
         except Exception as e:
             crawl_status["message"] = f"Error: {str(e)}"
             print(f"✗ Crawl error: {e}")
         finally:
-            await crawler.close()
+            if active_crawler:
+                await active_crawler.close()
+            active_crawler = None
             crawl_status["is_crawling"] = False
             crawl_status["current_source"] = None
     
@@ -220,9 +246,43 @@ async def crawl_news(
     
     return {
         "success": True,
-        "message": f"Crawl started for {len(valid_sources)} sources (last {days_back} days)",
-        "sources": valid_sources,
-        "total_sources": len(valid_sources)
+        "message": f"Crawl started for {len(valid_sources)} sources",
+        "config": {
+            "sources": len(valid_sources),
+            "days_back": days_back,
+            "max_concurrent": max_concurrent,
+            "delay_seconds": delay_seconds,
+            "rotate_ua": rotate_ua
+        }
+    }
+
+
+@sentiment_router.post("/crawl/stop")
+async def stop_crawl():
+    """
+    Stop the currently running crawl.
+    
+    The crawl will stop after completing the current source.
+    """
+    global crawl_status, active_crawler
+    
+    if not crawl_status["is_crawling"]:
+        return {
+            "success": False,
+            "message": "No crawl is currently running"
+        }
+    
+    if active_crawler:
+        active_crawler.stop()
+        crawl_status["message"] = "Stop requested, finishing current source..."
+        return {
+            "success": True,
+            "message": "Stop signal sent. Crawl will stop after current source completes."
+        }
+    
+    return {
+        "success": False,
+        "message": "Crawler instance not found"
     }
 
 
