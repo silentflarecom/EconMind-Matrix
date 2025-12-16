@@ -697,3 +697,48 @@ async def update_system_setting(key: str, value: str):
                 updated_at = datetime('now')
         """, (key, value))
         await db.commit()
+
+
+# ========== Layer 2 Database Initialization ==========
+
+async def init_layer2_database():
+    """Initialize Layer 2 Policy Corpus database tables"""
+    try:
+        from layer2_policy.backend.database import PolicyDatabase
+        policy_db = PolicyDatabase(DATABASE_FILE)
+        await policy_db.initialize()
+        print("✓ Layer 2 Policy tables initialized")
+    except ImportError:
+        # Try alternative import path
+        try:
+            import sys
+            from pathlib import Path
+            layer2_path = Path(__file__).parent.parent / "layer2-policy"
+            if str(layer2_path) not in sys.path:
+                sys.path.insert(0, str(layer2_path))
+            from backend.database import PolicyDatabase
+            policy_db = PolicyDatabase(DATABASE_FILE)
+            await policy_db.initialize()
+            print("✓ Layer 2 Policy tables initialized")
+        except Exception as e:
+            print(f"⚠ Could not initialize Layer 2 database: {e}")
+
+
+# ========== Layer 3 Database Initialization ==========
+
+async def init_layer3_database():
+    """Initialize Layer 3 Sentiment Corpus database tables"""
+    try:
+        import sys
+        from pathlib import Path
+        repo_root = Path(__file__).parent.parent
+        if str(repo_root) not in sys.path:
+            sys.path.insert(0, str(repo_root))
+            
+        from layer3_sentiment.backend.database import SentimentDatabase
+        sentiment_db = SentimentDatabase(DATABASE_FILE)
+        await sentiment_db.initialize()
+        print("✓ Layer 3 Sentiment tables initialized")
+    except Exception as e:
+        print(f"⚠ Could not initialize Layer 3 database: {e}")
+

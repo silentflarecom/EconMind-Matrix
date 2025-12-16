@@ -42,6 +42,20 @@ except ImportError as e:
     LAYER2_AVAILABLE = False
     print(f"⚠ Layer 2 Policy API not available: {e}")
 
+# Import Layer 3 Sentiment API
+# Import Layer 3 Sentiment API
+repo_root = Path(__file__).parent.parent
+if str(repo_root) not in sys.path:
+    sys.path.insert(0, str(repo_root))
+
+try:
+    from layer3_sentiment.backend.api import sentiment_router
+    LAYER3_AVAILABLE = True
+    print("✓ Layer 3 Sentiment API loaded")
+except ImportError as e:
+    LAYER3_AVAILABLE = False
+    print(f"⚠ Layer 3 Sentiment API not available: {e}")
+
 # Lifespan context manager for startup/shutdown events
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -57,6 +71,15 @@ async def lifespan(app: FastAPI):
             print("✓ Layer 2 database initialized")
         except Exception as e:
             print(f"⚠ Layer 2 database initialization failed: {e}")
+    
+    # Initialize Layer 3 database
+    if LAYER3_AVAILABLE:
+        try:
+            from backend.database import init_layer3_database
+            await init_layer3_database()
+            print("✓ Layer 3 database initialized")
+        except Exception as e:
+            print(f"⚠ Layer 3 database initialization failed: {e}")
     
     yield
     # Shutdown (if needed)
@@ -76,6 +99,11 @@ app.add_middleware(
 if LAYER2_AVAILABLE:
     app.include_router(policy_router, prefix="/api/policy", tags=["policy"])
     print("✓ Layer 2 Policy routes registered at /api/policy")
+
+# Include Layer 3 Sentiment router
+if LAYER3_AVAILABLE:
+    app.include_router(sentiment_router, prefix="/api/sentiment", tags=["sentiment"])
+    print("✓ Layer 3 Sentiment routes registered at /api/sentiment")
 
 # Initialize Wikipedia API
 # User-Agent is explicitly set to comply with Wikimedia User-Agent Policy

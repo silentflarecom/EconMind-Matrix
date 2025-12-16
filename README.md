@@ -91,10 +91,18 @@ EconMind-Matrix/
 │       ├── pboc/                 # PBOC reports
 │       └── fed/                  # Federal Reserve reports
 │
-├── 📂 layer3-sentiment/          # Layer 3: Sentiment Module (Planned)
+├── 📂 layer3_sentiment/          # Layer 3: Sentiment Module (Complete)
+│   ├── backend/
+│   │   ├── api.py                # FastAPI sentiment endpoints
+│   │   ├── database.py           # Sentiment database operations
+│   │   └── models.py             # News & sentiment data models
 │   ├── crawler/                  # News crawler
+│   │   └── news_crawler.py       # RSS feed crawler (Bloomberg, Reuters, etc.)
 │   ├── annotation/               # LLM annotation + Doccano integration
+│   │   ├── llm_annotator.py      # Gemini API sentiment analysis
+│   │   └── doccano_export.py     # Doccano import/export scripts
 │   └── analysis/                 # Trend analysis
+│       └── trend_analysis.py     # Time series analysis module
 │
 ├── 📂 dataset/                   # Dataset export directory
 │   ├── terminology.jsonl         # Layer 1 data
@@ -217,19 +225,57 @@ See [SETUP.md](SETUP.md) for details.
 - [x] Integrate Layer 2 router into main.py
 - [x] Frontend Component: PolicyCompare.vue with Topics, History, and Exports
 
-### 📅 Phase 3: Sentiment & Trend Corpus (January 2026)
+### ✅ Phase 3: Sentiment & Trend Corpus (Complete)
+> Completed: December 2025
 
-**🔧 Code Framework Created:**
-- [x] News crawler structure (`layer3-sentiment/crawler/news_crawler.py`)
-- [x] LLM annotator structure (`layer3-sentiment/annotation/llm_annotator.py`)
-- [x] Rule-based fallback annotator (works without API)
+**✅ Full Implementation Completed (2025-12-16):**
 
-**⏳ Pending Implementation:**
-- [ ] RSS Feed integration (Bloomberg, Reuters)
-- [ ] Gemini API integration for sentiment prediction
-- [ ] Doccano export/import scripts
-- [ ] Time series analysis module
-- [ ] ECharts visualization component
+- [x] **Data Models** (`layer3-sentiment/backend/models.py`)
+  - [x] NewsArticle, SentimentAnnotation, MarketContext dataclasses
+  - [x] Database schema for Layer 3 tables
+  - [x] Economic term variants (EN/ZH) for news filtering
+  - [x] Sentiment labels: Bullish, Bearish, Neutral
+
+- [x] **News Crawler** (`layer3-sentiment/crawler/news_crawler.py`)
+  - [x] RSS feed integration (Bloomberg, Reuters, WSJ, FT, Xinhua)
+  - [x] Async crawling with feedparser
+  - [x] Term-based news filtering
+  - [x] Automatic term detection from article content
+
+- [x] **LLM Sentiment Annotator** (`layer3-sentiment/annotation/llm_annotator.py`)
+  - [x] Gemini API integration for sentiment analysis
+  - [x] Bilingual prompt templates (EN/ZH)
+  - [x] Rule-based fallback annotator (no API required)
+  - [x] Hybrid annotator (optimizes API usage)
+  - [x] Batch annotation with rate limiting
+
+- [x] **Doccano Integration** (`layer3-sentiment/annotation/doccano_export.py`)
+  - [x] JSONL export for Doccano platform
+  - [x] CSV export for spreadsheet annotation
+  - [x] Import verified annotations back to database
+  - [x] Annotation quality checking
+
+- [x] **Trend Analysis** (`layer3-sentiment/analysis/trend_analysis.py`)
+  - [x] Daily term frequency calculation
+  - [x] Sentiment distribution over time
+  - [x] Trend direction detection (increasing/decreasing/stable)
+  - [x] Market correlation analysis (optional)
+  - [x] ECharts-compatible data generation
+
+- [x] **API Endpoints** (`layer3-sentiment/backend/api.py`)
+  - [x] POST `/crawl` - Crawl news from sources
+  - [x] GET `/articles` - List articles
+  - [x] POST `/annotate` - Run sentiment annotation
+  - [x] GET `/trend/{term}` - Get term trend analysis
+  - [x] GET `/trends/hot` - Get hot terms
+  - [x] GET `/export/doccano` - Export for Doccano
+
+- [x] **Frontend Component** (`frontend/src/components/SentimentAnalysis.vue`)
+  - [x] Dashboard with sentiment statistics
+  - [x] News crawling interface
+  - [x] Articles list with sentiment labels
+  - [x] Trend analysis visualization
+  - [x] Export options (JSON, JSONL, CSV, Doccano)
 
 ### 🎯 Phase 4: Three-Layer Integration (February 2026)
 
@@ -284,8 +330,14 @@ See [SETUP.md](SETUP.md) for details.
 | Layer 2 Database | ✅ Complete | `layer2-policy/backend/database.py` |
 | Layer 2 API | ✅ Complete | `layer2-policy/backend/api.py` |
 | Layer 2 Frontend | ✅ Complete | `frontend/src/components/PolicyCompare.vue` |
-| Layer 3 Crawler | 🔧 Framework | `layer3-sentiment/crawler/news_crawler.py` |
-| Layer 3 Annotator | 🔧 Framework | `layer3-sentiment/annotation/llm_annotator.py` |
+| Layer 3 Models | ✅ Complete | `layer3_sentiment/backend/models.py` |
+| Layer 3 Database | ✅ Complete | `layer3_sentiment/backend/database.py` |
+| Layer 3 Crawler | ✅ Complete | `layer3_sentiment/crawler/news_crawler.py` |
+| Layer 3 Annotator | ✅ Complete | `layer3_sentiment/annotation/llm_annotator.py` |
+| Layer 3 Doccano | ✅ Complete | `layer3_sentiment/annotation/doccano_export.py` |
+| Layer 3 Trends | ✅ Complete | `layer3_sentiment/analysis/trend_analysis.py` |
+| Layer 3 API | ✅ Complete | `layer3_sentiment/backend/api.py` |
+| Layer 3 Frontend | ✅ Complete | `frontend/src/components/SentimentAnalysis.vue` |
 | Export Scripts | 🔧 Framework | `scripts/export_dataset.py` |
 | Documentation | ✅ Complete | `docs/architecture.md`, `docs/api.md` |
 
@@ -300,8 +352,9 @@ See [SETUP.md](SETUP.md) for details.
    - Add specialized financial terms to Layer 2 Topic Pool.
    - Test "Import from Layer 1" feature with large terminology datasets.
 
-3. **Start Layer 3 Development**
-   - Determine news sources and crawler strategy.
+3. **Phase 4 Integration (Next)**
+   - Unified Search across all 3 layers.
+   - Integrated Dashboard/Knowledge Graph.
 
 
 ---

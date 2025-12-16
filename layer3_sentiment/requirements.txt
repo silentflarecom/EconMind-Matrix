@@ -1,4 +1,7 @@
-# Layer 3: Sentiment Module - Requirements
+# Layer 3: Sentiment & Trend Module - Requirements
+
+# Core Database
+aiosqlite>=0.19.0
 
 # News Crawling
 feedparser>=6.0.0
@@ -19,5 +22,9 @@ numpy>=1.24.0
 # Visualization (optional, for trend analysis)
 matplotlib>=3.7.0
 
-# Database (shared with Layer 1)
-aiosqlite>=0.19.0
+# API (shared with Layer 1)
+fastapi>=0.100.0
+uvicorn>=0.23.0
+
+# Pydantic for API models
+pydantic>=2.0.0

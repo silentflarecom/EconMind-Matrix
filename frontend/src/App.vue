@@ -5,6 +5,7 @@ import BatchImport from './components/BatchImport.vue'
 import ProgressMonitor from './components/ProgressMonitor.vue'
 import ResultsTable from './components/ResultsTable.vue'
 import PolicyCompare from './components/PolicyCompare.vue'
+import SentimentAnalysis from './components/SentimentAnalysis.vue'
 
 // Active view: 'layer1', 'layer2', or 'system'
 const activeView = ref('layer1')
@@ -250,6 +251,17 @@ const getStatusColor = (status) => {
           ]"
         >
           📊 Layer 2: Policy Corpus
+        </button>
+        <button
+          @click="activeView = 'layer3'"
+          :class="[
+            'px-8 py-3 rounded-xl font-semibold text-lg transition-all shadow-md',
+            activeView === 'layer3'
+              ? 'bg-gradient-to-r from-amber-600 to-orange-600 text-white shadow-amber-200'
+              : 'bg-white text-gray-600 hover:bg-gray-50'
+          ]"
+        >
+          📰 Layer 3: Sentiment
         </button>
         <button
           @click="activeView = 'system'; loadSystemData()"
@@ -565,6 +577,11 @@ const getStatusColor = (status) => {
       <!-- ==================== LAYER 2: POLICY CORPUS ==================== -->
       <div v-if="activeView === 'layer2'" class="space-y-6">
         <PolicyCompare />
+      </div>
+
+      <!-- ==================== LAYER 3: SENTIMENT ==================== -->
+      <div v-if="activeView === 'layer3'" class="space-y-6">
+        <SentimentAnalysis />
       </div>
 
       <!-- ==================== SYSTEM ==================== -->
