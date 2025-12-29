@@ -74,16 +74,29 @@ EconMind-Matrix/
 │   ├── main.py                   # FastAPI server
 │   ├── database.py               # Database operations
 │   ├── models.py                 # Data models
+│   ├── .env.example              # Environment configuration template
 │   └── output/                   # Crawl results (Markdown)
 │
 ├── 📂 frontend/                  # Layer 1: Vue.js Frontend (Complete)
 │   ├── src/
 │   │   ├── App.vue               # Main component
-│   │   └── components/           # UI components
+│   │   ├── components/           # UI components
+│   │   └── services/api.js       # Centralized API service
+│   ├── .env.development          # Dev environment config
+│   ├── .env.production           # Prod environment config
 │   └── package.json
 │
-├── 📂 layer2-policy/             # Layer 2: Policy Module (In Development)
+├── 📂 shared/                    # Shared Utilities (NEW)
+│   ├── __init__.py               # Package exports
+│   ├── utils.py                  # Text utilities (clean_text)
+│   ├── schema.py                 # Centralized DB schemas (11 tables)
+│   ├── errors.py                 # Standardized error classes
+│   ├── config.py                 # Configuration constants
+│   └── README.md                 # Module documentation
+│
+├── 📂 layer2_policy/             # Layer 2: Policy Module (Complete)
 │   ├── backend/
+│   │   ├── api.py                # Policy API endpoints
 │   │   ├── pdf_parser.py         # Marker PDF parsing
 │   │   ├── alignment.py          # Sentence-BERT paragraph alignment
 │   │   └── models.py             # Policy data models
@@ -118,6 +131,7 @@ EconMind-Matrix/
 │   ├── architecture.md           # Technical architecture
 │   └── api.md                    # API documentation
 │
+├── pyproject.toml                # Python package configuration
 ├── README.md                     # This file
 ├── SETUP.md                      # Installation guide
 └── LICENSE                       # MIT License
@@ -349,7 +363,33 @@ See [SETUP.md](SETUP.md) for details.
 | Export Scripts | 🔧 Framework | `scripts/export_dataset.py` |
 | Documentation | ✅ Complete | `docs/architecture.md`, `docs/api.md` |
 
-### Latest Updates (2024-12-16)
+### Latest Updates (2024-12-29)
+
+**🔧 Technical Debt Remediation Complete:**
+- ✅ Created `shared/` module with centralized utilities
+- ✅ Centralized database schemas (11 tables in `shared/schema.py`)
+- ✅ Standardized error handling (`shared/errors.py`)
+- ✅ Replaced all hardcoded API URLs with environment-aware configuration
+- ✅ Added type hints to core functions
+- ✅ Environment-aware CORS configuration
+- ✅ Centralized configuration constants (`shared/config.py`)
+
+**📁 New `shared/` Module:**
+```python
+from shared.utils import clean_text
+from shared.schema import LAYER1_SQL_SCHEMA, ALL_TABLES
+from shared.errors import NotFoundError, ValidationError
+from shared.config import DEFAULT_CRAWL_INTERVAL, SUPPORTED_LANGUAGES
+```
+
+**🌐 Frontend API Configuration:**
+```javascript
+// frontend/src/services/api.js
+import { API_BASE } from './services/api'
+// Uses VITE_API_BASE_URL from .env.development or .env.production
+```
+
+### Previous Updates (2024-12-16)
 
 **🔧 Crawler Enhancements:**
 - User-Agent rotation pool (8 realistic browser UAs)
