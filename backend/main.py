@@ -29,8 +29,8 @@ from models import Association
 # Import Layer 2 Policy API
 import sys
 from pathlib import Path
-# Add layer2-policy to path
-layer2_path = Path(__file__).parent.parent / "layer2-policy"
+# Add layer2_policy to path (renamed from layer2-policy for Python package naming)
+layer2_path = Path(__file__).parent.parent / "layer2_policy"
 if str(layer2_path) not in sys.path:
     sys.path.insert(0, str(layer2_path))
 
@@ -43,10 +43,22 @@ except ImportError as e:
     print(f"⚠ Layer 2 Policy API not available: {e}")
 
 # Import Layer 3 Sentiment API
-# Import Layer 3 Sentiment API
 repo_root = Path(__file__).parent.parent
 if str(repo_root) not in sys.path:
     sys.path.insert(0, str(repo_root))
+
+# Import shared utilities (Issue #4 fix)
+try:
+    from shared.utils import clean_text as clean_export_text
+except ImportError:
+    # Fallback if shared module not found
+    import re
+    def clean_export_text(text):
+        if not text:
+            return text
+        text = re.sub(r'[\r\n]+', ' ', text)
+        text = re.sub(r' +', ' ', text)
+        return text.strip()
 
 try:
     from layer3_sentiment.backend.api import sentiment_router
@@ -86,12 +98,33 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
-# CORS configuration
+# CORS configuration (Issue #8 fix)
+# In production, set CORS_ORIGINS environment variable with comma-separated origins
+# Example: CORS_ORIGINS=https://econmind.example.com,https://app.econmind.example.com
+import os
+_cors_origins_env = os.getenv("CORS_ORIGINS", "")
+_is_development = os.getenv("ENV", "development").lower() == "development"
+
+if _cors_origins_env:
+    # Production: use explicit origins
+    _cors_origins = [origin.strip() for origin in _cors_origins_env.split(",") if origin.strip()]
+elif _is_development:
+    # Development: allow localhost origins
+    _cors_origins = [
+        "http://localhost:5173",  # Vite dev server
+        "http://localhost:3000",  # Alternative dev port
+        "http://127.0.0.1:5173",
+        "http://127.0.0.1:3000",
+    ]
+else:
+    # Production without CORS_ORIGINS set: restrict to same origin
+    _cors_origins = []
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # For local development
+    allow_origins=_cors_origins if _cors_origins else ["*"] if _is_development else [],
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 
@@ -390,16 +423,8 @@ async def export_results(task_id: int, format: str = "json"):
     if not terms:
         raise HTTPException(status_code=404, detail="No completed terms found")
     
-    # Helper function to clean text for export (normalize newlines)
-    def clean_text(text):
-        if not text:
-            return text
-        # Replace various newline formats with single space
-        import re
-        text = re.sub(r'[\r\n]+', ' ', text)
-        # Remove excessive spaces
-        text = re.sub(r' +', ' ', text)
-        return text.strip()
+    # Use shared clean_text function (Issue #4 fix - moved to shared/utils.py)
+    clean_text = clean_export_text
     
     # Parse translations JSON for each term and clean summaries
     for term in terms:

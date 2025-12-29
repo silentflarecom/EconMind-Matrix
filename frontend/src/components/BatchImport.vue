@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import axios from 'axios'
+import { API_BASE } from '@/services/api'
 
 const emit = defineEmits(['task-created'])
 
@@ -28,7 +29,7 @@ const skipDuplicates = ref(true)
 const loadLanguages = async () => {
   loadingLanguages.value = true
   try {
-    const response = await axios.get('http://localhost:8000/api/languages')
+    const response = await axios.get(`${API_BASE}/api/languages`)
     availableLanguages.value = response.data.languages
   } catch (err) {
     console.error('Failed to load languages:', err)
@@ -126,7 +127,7 @@ const checkDuplicates = async () => {
   error.value = null
   
   try {
-    const response = await axios.post('http://localhost:8000/api/corpus/check-duplicates', {
+    const response = await axios.post(`${API_BASE}/api/corpus/check-duplicates`, {
       terms: terms.value
     })
     
@@ -166,7 +167,7 @@ const createBatchTask = async (termsToSubmit) => {
   error.value = null
   
   try {
-    const response = await axios.post('http://localhost:8000/api/batch/create', {
+    const response = await axios.post(`${API_BASE}/api/batch/create`, {
       terms: termsToSubmit,
       crawl_interval: crawlInterval.value,
       max_depth: maxDepth.value,

@@ -2,6 +2,7 @@
 import { ref, onMounted, computed } from 'vue'
 import axios from 'axios'
 import VisualGraph from './VisualGraph.vue'
+import { API_BASE } from '@/services/api'
 
 const props = defineProps({
   taskId: {
@@ -103,7 +104,7 @@ const targetLanguages = computed(() => {
 
 const fetchTaskInfo = async () => {
   try {
-    const response = await axios.get(`http://localhost:8000/api/batch/${props.taskId}/status`)
+    const response = await axios.get(`${API_BASE}/api/batch/${props.taskId}/status`)
     taskInfo.value = response.data
   } catch (error) {
     console.error('Error fetching task info:', error)
@@ -112,7 +113,7 @@ const fetchTaskInfo = async () => {
 
 const fetchTerms = async () => {
   try {
-    const response = await axios.get(`http://localhost:8000/api/batch/${props.taskId}/terms`)
+    const response = await axios.get(`${API_BASE}/api/batch/${props.taskId}/terms`)
     terms.value = response.data
   } catch (error) {
     console.error('Error fetching terms:', error)
@@ -124,7 +125,7 @@ const fetchTerms = async () => {
 const fetchQuality = async () => {
   loadingQuality.value = true
   try {
-    const response = await axios.get(`http://localhost:8000/api/quality/analyze?task_id=${props.taskId}`)
+    const response = await axios.get(`${API_BASE}/api/quality/analyze?task_id=${props.taskId}`)
     qualityData.value = response.data
   } catch (error) {
     console.error('Error fetching quality:', error)
@@ -142,7 +143,7 @@ const cleanData = async () => {
   
   cleaning.value = true
   try {
-    const response = await axios.post('http://localhost:8000/api/quality/clean', {
+    const response = await axios.post(`${API_BASE}/api/quality/clean`, {
       task_id: props.taskId,
       remove_failed: cleanOptions.value.removeFailed,
       remove_missing_chinese: cleanOptions.value.removeMissingChinese,
@@ -165,7 +166,7 @@ const cleanData = async () => {
 
 const exportResults = async (format) => {
   try {
-    const url = `http://localhost:8000/api/batch/${props.taskId}/export?format=${format}`
+    const url = `${API_BASE}/api/batch/${props.taskId}/export?format=${format}`
     window.open(url, '_blank')
   } catch (error) {
     console.error('Error exporting results:', error)

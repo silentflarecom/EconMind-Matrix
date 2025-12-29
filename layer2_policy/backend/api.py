@@ -405,32 +405,7 @@ async def get_statistics():
 
 
 # ==================== Export ====================
-
-@policy_router.get("/export")
-async def export_alignments(
-    format: str = Query("json", description="Export format: json or jsonl"),
-    min_similarity: float = Query(0.5)
-):
-    """Export all alignments for dataset distribution."""
-    alignments = await db.get_alignments(min_similarity=min_similarity, limit=10000)
-    
-    data = [a.to_dict() for a in alignments]
-    
-    if format == "jsonl":
-        import json
-        lines = [json.dumps(item, ensure_ascii=False) for item in data]
-        content = "\n".join(lines)
-        return JSONResponse(
-            content={"data": content, "count": len(data)},
-            headers={"Content-Disposition": "attachment; filename=policy_alignments.jsonl"}
-        )
-    else:
-        return {
-            "success": True,
-            "format": "json",
-            "total": len(data),
-            "alignments": data
-        }
+# Note: Main export endpoints are defined below (export_alignments, export_reports, export_parallel_corpus)
 
 
 # ==================== Integration with Layer 1 ====================
@@ -487,15 +462,16 @@ async def search_term_in_policy(
 
 # ==================== Export ====================
 
-def clean_export_text(text):
-    """Clean text for export by removing newlines and extra spaces."""
-    if not text:
-        return text
-    import re
-    text = re.sub(r'[\r\n]+', ' ', text)
-    text = re.sub(r' +', ' ', text)
-    return text.strip()
+# Import clean_text from shared utilities (Issue #4 fix)
+try:
+    from shared.utils import clean_export_text
+except ImportError:
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+    from shared.utils import clean_export_text
 
+@policy_router.get("/export")
 @policy_router.get("/export/alignments")
 async def export_alignments(format: str = Query("jsonl", enum=["json", "jsonl"])):
     """Export all alignments in JSON or JSONL format."""

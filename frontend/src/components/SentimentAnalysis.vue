@@ -825,8 +825,9 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
 import axios from 'axios'
+import { API_BASE as API_ROOT } from '@/services/api'
 
-const API_BASE = 'http://localhost:8000/api/sentiment'
+const API_BASE = `${API_ROOT}/api/sentiment`
 
 // State
 const activeTab = ref('dashboard')

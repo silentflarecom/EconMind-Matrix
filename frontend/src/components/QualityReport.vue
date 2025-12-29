@@ -1,6 +1,7 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue'
 import axios from 'axios'
+import { API_BASE } from '@/services/api'
 
 const props = defineProps({
   taskId: {
@@ -37,8 +38,8 @@ const loadQualityData = async () => {
   
   try {
     const url = props.taskId 
-      ? `http://localhost:8000/api/quality/analyze?task_id=${props.taskId}`
-      : 'http://localhost:8000/api/quality/analyze'
+      ? `${API_BASE}/api/quality/analyze?task_id=${props.taskId}`
+      : `${API_BASE}/api/quality/analyze`
     
     const response = await axios.get(url)
     qualityData.value = response.data
@@ -62,7 +63,7 @@ const loadFilteredTerms = async () => {
       params.append('task_id', props.taskId)
     }
     
-    const response = await axios.get(`http://localhost:8000/api/quality/issues?${params}`)
+    const response = await axios.get(`${API_BASE}/api/quality/issues?${params}`)
     filteredTerms.value = response.data.terms
   } catch (err) {
     console.error('Failed to load filtered terms:', err)
@@ -83,7 +84,7 @@ const cleanData = async () => {
   error.value = null
   
   try {
-    const response = await axios.post('http://localhost:8000/api/quality/clean', {
+    const response = await axios.post(`${API_BASE}/api/quality/clean`, {
       task_id: props.taskId,
       remove_failed: cleanOptions.value.removeFailed,
       remove_missing_chinese: cleanOptions.value.removeMissingChinese,

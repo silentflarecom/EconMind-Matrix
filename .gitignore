@@ -60,3 +60,5 @@ Thumbs.db
 # Local config (if any personal settings are added in future)
 local_settings.py
 config.local.json
+docs/TECHNICAL_DEBT_ANALYSIS.md
+verify_fixes.py

@@ -1,8 +1,9 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue'
 import axios from 'axios'
+import { API_BASE as API_ROOT } from '@/services/api'
 
-const API_BASE = 'http://localhost:8000/api/policy'
+const API_BASE = `${API_ROOT}/api/policy`
 
 // State
 const loading = ref(false)

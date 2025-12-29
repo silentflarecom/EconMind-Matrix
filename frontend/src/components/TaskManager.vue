@@ -1,6 +1,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import axios from 'axios'
+import { API_BASE } from '@/services/api'
 
 const emit = defineEmits(['view-task', 'close'])
 
@@ -17,7 +18,7 @@ const loadTasks = async () => {
   error.value = null
   
   try {
-    const response = await axios.get('http://localhost:8000/api/batch/tasks')
+    const response = await axios.get(`${API_BASE}/api/batch/tasks`)
     tasks.value = response.data
   } catch (err) {
     error.value = err.response?.data?.detail || 'Failed to load tasks'
@@ -28,7 +29,7 @@ const loadTasks = async () => {
 
 const loadStatistics = async () => {
   try {
-    const response = await axios.get('http://localhost:8000/api/corpus/statistics')
+    const response = await axios.get(`${API_BASE}/api/corpus/statistics`)
     statistics.value = response.data
   } catch (err) {
     console.error('Failed to load statistics:', err)
@@ -37,7 +38,7 @@ const loadStatistics = async () => {
 
 const deleteTask = async (taskId) => {
   try {
-    await axios.delete(`http://localhost:8000/api/batch/${taskId}`)
+    await axios.delete(`${API_BASE}/api/batch/${taskId}`)
     deleteConfirm.value = null
     await loadTasks()
     await loadStatistics()
@@ -51,7 +52,7 @@ const resetAllData = async () => {
   
   resetting.value = true
   try {
-    await axios.post('http://localhost:8000/api/system/reset?confirm=true')
+    await axios.post(`${API_BASE}/api/system/reset?confirm=true`)
     resetConfirm.value = false
     await loadTasks()
     await loadStatistics()
@@ -63,7 +64,7 @@ const resetAllData = async () => {
 }
 
 const downloadBackup = () => {
-  window.open('http://localhost:8000/api/system/backup', '_blank')
+  window.open(`${API_BASE}/api/system/backup`, '_blank')
 }
 
 // Restore backup
@@ -101,7 +102,7 @@ const restoreBackup = async () => {
     formData.append('file', selectedRestoreFile.value)
     
     const response = await axios.post(
-      'http://localhost:8000/api/system/restore?confirm=true',
+      `${API_BASE}/api/system/restore?confirm=true`,
       formData,
       {
         headers: {
@@ -146,7 +147,7 @@ const settingsSuccess = ref(false)
 const loadSettings = async () => {
   loadingSettings.value = true
   try {
-    const response = await axios.get('http://localhost:8000/api/system/settings/user_agent')
+    const response = await axios.get(`${API_BASE}/api/system/settings/user_agent`)
     userAgent.value = response.data.value
   } catch (err) {
     console.warn('Failed to load user agent setting:', err)
@@ -159,7 +160,7 @@ const saveSettings = async () => {
   savingSettings.value = true
   settingsSuccess.value = false
   try {
-    await axios.post('http://localhost:8000/api/system/settings', {
+    await axios.post(`${API_BASE}/api/system/settings`, {
       key: 'user_agent',
       value: userAgent.value
     })

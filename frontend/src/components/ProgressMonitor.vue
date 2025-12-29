@@ -2,6 +2,7 @@
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import axios from 'axios'
 import VisualGraph from './VisualGraph.vue'
+import { API_BASE } from '@/services/api'
 
 const props = defineProps({
   taskId: {
@@ -32,7 +33,7 @@ const isCompleted = computed(() => {
 
 const fetchStatus = async () => {
   try {
-    const response = await axios.get(`http://localhost:8000/api/batch/${props.taskId}/status`)
+    const response = await axios.get(`${API_BASE}/api/batch/${props.taskId}/status`)
     status.value = response.data
     loading.value = false
     
@@ -63,7 +64,7 @@ const stopPolling = () => {
 
 const cancelTask = async () => {
   try {
-    await axios.post(`http://localhost:8000/api/batch/${props.taskId}/cancel`)
+    await axios.post(`${API_BASE}/api/batch/${props.taskId}/cancel`)
     await fetchStatus()
   } catch (error) {
     console.error('Error cancelling task:', error)

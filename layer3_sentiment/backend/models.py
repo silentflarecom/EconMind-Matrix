@@ -260,78 +260,15 @@ except ImportError:
     # Pydantic not installed, skip API models
     pass
 
-
 # SQL statements for creating Layer 3 tables
-LAYER3_SQL_SCHEMA = """
--- News articles table
-CREATE TABLE IF NOT EXISTS news_articles (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    source TEXT NOT NULL,
-    title TEXT NOT NULL,
-    url TEXT UNIQUE NOT NULL,
-    published_date DATETIME,
-    summary TEXT,
-    full_text TEXT,
-    language TEXT DEFAULT 'en',
-    related_terms TEXT,  -- JSON array of term strings
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-);
-
--- Sentiment annotations table
-CREATE TABLE IF NOT EXISTS sentiment_annotations (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    article_id INTEGER NOT NULL,
-    sentiment_label TEXT NOT NULL,
-    confidence_score REAL DEFAULT 0.0,
-    annotation_source TEXT NOT NULL,
-    reasoning TEXT,
-    detected_entities TEXT,  -- JSON array of entities
-    verified BOOLEAN DEFAULT FALSE,
-    verified_by TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (article_id) REFERENCES news_articles(id) ON DELETE CASCADE
-);
-
--- Market context table
-CREATE TABLE IF NOT EXISTS market_context (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    context_date DATE UNIQUE NOT NULL,
-    sp500_close REAL,
-    sp500_change_pct REAL,
-    nasdaq_close REAL,
-    nasdaq_change_pct REAL,
-    vix_close REAL,
-    us_10y_yield REAL,
-    dxy_close REAL,
-    sse_close REAL,
-    sse_change_pct REAL,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-);
-
--- Term frequency history (for trend analysis)
-CREATE TABLE IF NOT EXISTS term_frequency (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    term TEXT NOT NULL,
-    frequency_date DATE NOT NULL,
-    mention_count INTEGER DEFAULT 0,
-    bullish_count INTEGER DEFAULT 0,
-    bearish_count INTEGER DEFAULT 0,
-    neutral_count INTEGER DEFAULT 0,
-    avg_sentiment REAL DEFAULT 0.0,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(term, frequency_date)
-);
-
--- Indexes for better query performance
-CREATE INDEX IF NOT EXISTS idx_articles_source ON news_articles(source);
-CREATE INDEX IF NOT EXISTS idx_articles_date ON news_articles(published_date DESC);
-CREATE INDEX IF NOT EXISTS idx_articles_language ON news_articles(language);
-CREATE INDEX IF NOT EXISTS idx_annotations_article ON sentiment_annotations(article_id);
-CREATE INDEX IF NOT EXISTS idx_annotations_sentiment ON sentiment_annotations(sentiment_label);
-CREATE INDEX IF NOT EXISTS idx_annotations_source ON sentiment_annotations(annotation_source);
-CREATE INDEX IF NOT EXISTS idx_market_date ON market_context(context_date);
-CREATE INDEX IF NOT EXISTS idx_frequency_term ON term_frequency(term, frequency_date);
-"""
+# Centralized in shared/schema.py (Issue #6 fix)
+try:
+    from shared.schema import LAYER3_SQL_SCHEMA
+except ImportError:
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+    from shared.schema import LAYER3_SQL_SCHEMA
 
 
 def detect_related_terms(text: str, language: str = "auto") -> List[str]:

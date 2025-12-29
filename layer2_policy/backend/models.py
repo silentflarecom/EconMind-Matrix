@@ -214,61 +214,15 @@ except ImportError:
     # Pydantic not installed, skip API models
     pass
 
-
 # SQL statements for creating Layer 2 tables
-LAYER2_SQL_SCHEMA = """
--- Policy reports table
-CREATE TABLE IF NOT EXISTS policy_reports (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    source TEXT NOT NULL,
-    report_type TEXT NOT NULL,
-    title TEXT NOT NULL,
-    report_date DATE,
-    raw_text TEXT,
-    parsed_markdown TEXT,
-    file_path TEXT,
-    language TEXT DEFAULT 'zh',
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-);
-
--- Policy paragraphs table
-CREATE TABLE IF NOT EXISTS policy_paragraphs (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    report_id INTEGER NOT NULL,
-    paragraph_index INTEGER NOT NULL,
-    paragraph_text TEXT NOT NULL,
-    topic TEXT,
-    topic_confidence REAL DEFAULT 0.0,
-    section_title TEXT,
-    word_count INTEGER DEFAULT 0,
-    embedding BLOB,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (report_id) REFERENCES policy_reports(id) ON DELETE CASCADE
-);
-
--- Policy alignments table
-CREATE TABLE IF NOT EXISTS policy_alignments (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    source_paragraph_id INTEGER NOT NULL,
-    target_paragraph_id INTEGER NOT NULL,
-    similarity_score REAL NOT NULL,
-    alignment_method TEXT DEFAULT 'sentence_bert',
-    topic TEXT,
-    term_id INTEGER,
-    verified BOOLEAN DEFAULT FALSE,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (source_paragraph_id) REFERENCES policy_paragraphs(id) ON DELETE CASCADE,
-    FOREIGN KEY (target_paragraph_id) REFERENCES policy_paragraphs(id) ON DELETE CASCADE,
-    FOREIGN KEY (term_id) REFERENCES terms(id) ON DELETE SET NULL
-);
-
--- Indexes for better query performance
-CREATE INDEX IF NOT EXISTS idx_paragraphs_report ON policy_paragraphs(report_id);
-CREATE INDEX IF NOT EXISTS idx_paragraphs_topic ON policy_paragraphs(topic);
-CREATE INDEX IF NOT EXISTS idx_alignments_similarity ON policy_alignments(similarity_score DESC);
-CREATE INDEX IF NOT EXISTS idx_alignments_topic ON policy_alignments(topic);
-CREATE INDEX IF NOT EXISTS idx_alignments_term ON policy_alignments(term_id);
-"""
+# Centralized in shared/schema.py (Issue #6 fix)
+try:
+    from shared.schema import LAYER2_SQL_SCHEMA
+except ImportError:
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+    from shared.schema import LAYER2_SQL_SCHEMA
 
 
 def get_topic_by_keywords(text: str, language: str = "auto") -> tuple:

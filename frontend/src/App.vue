@@ -1,6 +1,7 @@
 <script setup>
 import { ref } from 'vue'
 import axios from 'axios'
+import { API_BASE } from './services/api'
 import BatchImport from './components/BatchImport.vue'
 import ProgressMonitor from './components/ProgressMonitor.vue'
 import ResultsTable from './components/ResultsTable.vue'
@@ -33,7 +34,7 @@ const search = async () => {
   result.value = null
   
   try {
-    const response = await axios.get(`http://localhost:8000/search?term=${encodeURIComponent(term.value)}`)
+    const response = await axios.get(`${API_BASE}/search?term=${encodeURIComponent(term.value)}`)
     result.value = response.data
   } catch (err) {
     if (err.response && err.response.data && err.response.data.detail) {
@@ -69,7 +70,7 @@ const handleTaskCreated = async (taskData) => {
   
   // Start the task
   try {
-    await axios.post(`http://localhost:8000/api/batch/${taskData.task_id}/start`)
+    await axios.post(`${API_BASE}/api/batch/${taskData.task_id}/start`)
     showProgress.value = true
     layer1Tab.value = 'progress'
   } catch (err) {
@@ -83,7 +84,7 @@ const handleTaskCompleted = (taskId) => {
 
 const handleRetry = async (taskId) => {
   try {
-    await axios.post(`http://localhost:8000/api/batch/${taskId}/retry-failed`)
+    await axios.post(`${API_BASE}/api/batch/${taskId}/retry-failed`)
     showResults.value = false
     showProgress.value = true
   } catch (err) {
@@ -130,10 +131,10 @@ const resetting = ref(false)
 const loadSystemData = async () => {
   try {
     const [statsRes, tasksRes, layer2Res, layer3Res] = await Promise.all([
-      axios.get('http://localhost:8000/api/corpus/statistics'),
-      axios.get('http://localhost:8000/api/batch/tasks'),
-      axios.get('http://localhost:8000/api/policy/stats').catch(() => ({ data: { statistics: null } })),
-      axios.get('http://localhost:8000/api/sentiment/stats').catch(() => ({ data: { statistics: null } }))
+      axios.get(`${API_BASE}/api/corpus/statistics`),
+      axios.get(`${API_BASE}/api/batch/tasks`),
+      axios.get(`${API_BASE}/api/policy/stats`).catch(() => ({ data: { statistics: null } })),
+      axios.get(`${API_BASE}/api/sentiment/stats`).catch(() => ({ data: { statistics: null } }))
     ])
     systemStats.value = statsRes.data
     tasks.value = tasksRes.data
@@ -144,7 +145,7 @@ const loadSystemData = async () => {
   }
   
   try {
-    const settingsRes = await axios.get('http://localhost:8000/api/system/settings/user_agent')
+    const settingsRes = await axios.get(`${API_BASE}/api/system/settings/user_agent`)
     userAgent.value = settingsRes.data.value
   } catch (err) {
     console.warn('Failed to load user agent:', err)
@@ -155,7 +156,7 @@ const saveUserAgent = async () => {
   savingSettings.value = true
   settingsSuccess.value = false
   try {
-    await axios.post('http://localhost:8000/api/system/settings', {
+    await axios.post(`${API_BASE}/api/system/settings`, {
       key: 'user_agent',
       value: userAgent.value
     })
@@ -169,20 +170,20 @@ const saveUserAgent = async () => {
 }
 
 const downloadBackup = () => {
-  window.open('http://localhost:8000/api/system/backup', '_blank')
+  window.open(`${API_BASE}/api/system/backup`, '_blank')
 }
 
 const downloadLayer2Backup = () => {
-  window.open('http://localhost:8000/api/policy/backup', '_blank')
+  window.open(`${API_BASE}/api/policy/backup`, '_blank')
 }
 
 const downloadLayer3Backup = () => {
-  window.open('http://localhost:8000/api/sentiment/backup', '_blank')
+  window.open(`${API_BASE}/api/sentiment/backup`, '_blank')
 }
 
 const deleteTask = async (taskId) => {
   try {
-    await axios.delete(`http://localhost:8000/api/batch/${taskId}`)
+    await axios.delete(`${API_BASE}/api/batch/${taskId}`)
     deleteConfirm.value = null
     await loadSystemData()
   } catch (err) {
@@ -193,7 +194,7 @@ const deleteTask = async (taskId) => {
 const resetAllData = async () => {
   resetting.value = true
   try {
-    await axios.post('http://localhost:8000/api/system/reset?confirm=true')
+    await axios.post(`${API_BASE}/api/system/reset?confirm=true`)
     resetConfirm.value = false
     await loadSystemData()
   } catch (err) {

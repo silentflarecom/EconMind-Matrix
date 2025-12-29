@@ -1,6 +1,7 @@
 import aiosqlite
 import os
 from datetime import datetime
+from typing import Any, Dict, List, Optional
 
 DATABASE_FILE = "corpus.db"
 
@@ -92,7 +93,7 @@ async def init_database():
         
         await db.commit()
 
-async def add_column_if_not_exists(db, table, column, definition):
+async def add_column_if_not_exists(db: aiosqlite.Connection, table: str, column: str, definition: str) -> None:
     """Helper to add a column if it doesn't already exist"""
     try:
         await db.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
@@ -111,7 +112,7 @@ async def create_batch_task(total_terms: int, crawl_interval: int = 3, max_depth
         await db.commit()
         return cursor.lastrowid
 
-async def add_terms_to_task(task_id: int, terms: list, depth_level: int = 0, source_term_id: int = None):
+async def add_terms_to_task(task_id: int, terms: List[str], depth_level: int = 0, source_term_id: Optional[int] = None) -> None:
     """Add terms to a batch task"""
     async with aiosqlite.connect(DATABASE_FILE) as db:
         await db.executemany("""
@@ -127,7 +128,7 @@ async def add_terms_to_task(task_id: int, terms: list, depth_level: int = 0, sou
             """, (len(terms), task_id))
         await db.commit()
 
-async def update_task_status(task_id: int, status: str):
+async def update_task_status(task_id: int, status: str) -> None:
     """Update the status of a batch task"""
     async with aiosqlite.connect(DATABASE_FILE) as db:
         await db.execute("""
@@ -138,9 +139,9 @@ async def update_task_status(task_id: int, status: str):
         await db.commit()
 
 async def update_term_status(task_id: int, term: str, status: str, 
-                            en_summary: str = None, en_url: str = None,
-                            zh_summary: str = None, zh_url: str = None,
-                            error_message: str = None, translations: str = None):
+                            en_summary: Optional[str] = None, en_url: Optional[str] = None,
+                            zh_summary: Optional[str] = None, zh_url: Optional[str] = None,
+                            error_message: Optional[str] = None, translations: Optional[str] = None) -> None:
     """Update the status and data of a term
     
     translations: JSON string with format {"lang": {"summary": "...", "url": "..."}}
@@ -154,7 +155,7 @@ async def update_term_status(task_id: int, term: str, status: str,
         """, (status, en_summary, en_url, zh_summary, zh_url, error_message, translations, task_id, term))
         await db.commit()
 
-async def update_task_counters(task_id: int):
+async def update_task_counters(task_id: int) -> None:
     """Update completed and failed counters for a task"""
     async with aiosqlite.connect(DATABASE_FILE) as db:
         cursor = await db.execute("""

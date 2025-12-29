@@ -2,6 +2,7 @@
 import { ref, onMounted, onUnmounted, watch } from 'vue'
 import * as d3 from 'd3'
 import axios from 'axios'
+import { API_BASE } from '@/services/api'
 
 const props = defineProps({
   taskId: {
@@ -19,7 +20,7 @@ const fetchGraphData = async () => {
   if (!props.taskId) return
   loading.value = true
   try {
-    const response = await axios.get(`http://localhost:8000/api/batch/${props.taskId}/graph`)
+    const response = await axios.get(`${API_BASE}/api/batch/${props.taskId}/graph`)
     graphData.value = response.data
     renderGraph()
   } catch (e) {

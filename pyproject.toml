@@ -1,0 +1,66 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "econmind-matrix"
+version = "1.0.0"
+description = "Multi-Granularity Bilingual Economic Corpus Platform"
+readme = "README.md"
+requires-python = ">=3.9"
+license = {text = "MIT"}
+authors = [
+    {name = "EconMind Team"}
+]
+keywords = ["nlp", "economics", "corpus", "multilingual", "sentiment-analysis"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+dependencies = [
+    "fastapi>=0.104.0",
+    "uvicorn>=0.24.0",
+    "aiosqlite>=0.19.0",
+    "wikipedia-api>=0.6.0",
+    "httpx>=0.25.0",
+    "pydantic>=2.0.0",
+]
+
+[project.optional-dependencies]
+layer2 = [
+    "sentence-transformers>=2.2.0",
+    "PyMuPDF>=1.23.0",
+]
+layer3 = [
+    "feedparser>=6.0.0",
+    "beautifulsoup4>=4.12.0",
+    "aiohttp>=3.9.0",
+]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
+]
+all = [
+    "econmind-matrix[layer2,layer3,dev]",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["backend*", "layer2_policy*", "layer3_sentiment*", "shared*"]
+
+[tool.setuptools.package-data]
+"*" = ["*.yaml", "*.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests", "layer3_sentiment/tests"]
+asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
