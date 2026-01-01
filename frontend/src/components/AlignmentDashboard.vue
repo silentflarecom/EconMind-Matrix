@@ -37,6 +37,91 @@
       </div>
     </div>
 
+    <!-- Cross-Lingual Augmentation Panel (Top Position) -->
+    <div class="augmentation-section">
+      <div class="section-header">
+        <h3>🌐 Cross-Lingual Augmentation</h3>
+        <span class="aug-badge" :class="augStatus.is_running ? 'running' : 'ready'">
+          {{ augStatus.is_running ? '⏳ Running...' : '✅ Ready' }}
+        </span>
+      </div>
+      
+      <p class="aug-description">
+        Generate cross-lingual training data by translating FED→中文 and PBOC→English using LLM APIs.
+        This solves the "knowledge silo" problem. <strong v-if="augConfig.api_key">✓ API Configured</strong>
+      </p>
+      
+      <div class="aug-stats">
+        <div class="stat-chip fed">FED: {{ augStatus.fed_count }} records</div>
+        <div class="stat-chip pboc">PBOC: {{ augStatus.pboc_count }} records</div>
+        <div v-if="augStatus.latest_output" class="stat-chip output">
+          Latest: {{ augStatus.latest_output }}
+        </div>
+      </div>
+      
+      <div class="aug-form">
+        <div class="form-row">
+          <label>API Provider:</label>
+          <select v-model="augConfig.provider" class="aug-select">
+            <option value="openai">OpenAI</option>
+            <option value="gemini">Gemini</option>
+          </select>
+        </div>
+        
+        <div class="form-row">
+          <label>API Key:</label>
+          <input 
+            type="password" 
+            v-model="augConfig.api_key" 
+            placeholder="sk-xxx or AIza..."
+            class="aug-input"
+          />
+        </div>
+        
+        <div class="form-row">
+          <label>Model:</label>
+          <input 
+            type="text" 
+            v-model="augConfig.model" 
+            :placeholder="augConfig.provider === 'openai' ? 'gpt-4o-mini' : 'gemini-1.5-flash'"
+            class="aug-input"
+          />
+        </div>
+        
+        <div class="form-row">
+          <label>Ratio ({{ Math.round(augConfig.ratio * 100) }}% augmented):</label>
+          <input 
+            type="range" 
+            v-model="augConfig.ratio" 
+            min="0.1" 
+            max="0.5" 
+            step="0.05"
+            class="aug-slider"
+          />
+        </div>
+        
+        <div class="form-actions">
+          <button 
+            class="run-aug-btn" 
+            @click="runAugmentation"
+            :disabled="augStatus.is_running || !augConfig.api_key"
+          >
+            🚀 Run Augmentation
+          </button>
+          <button 
+            class="refresh-status-btn"
+            @click="loadAugmentationStatus"
+          >
+            🔄 Refresh Status
+          </button>
+        </div>
+        
+        <div v-if="augStatus.message" class="aug-message" :class="augStatus.is_running ? 'info' : 'success'">
+          {{ augStatus.message }}
+        </div>
+      </div>
+    </div>
+
     <!-- Knowledge Cells List -->
     <div class="cells-section">
       <div class="section-header">
@@ -159,8 +244,17 @@
                     {{ getLanguageName(lang) }}
                   </option>
                 </select>
-                <button class="cell-export-btn" @click="exportCell(cell.concept_id)">
-                  📥 Export
+                <select v-model="translationMode" class="translation-mode-select">
+                  <option value="none">📄 No Translation</option>
+                  <option value="local">🖥️ Local (Argos)</option>
+                  <option value="api" :disabled="!augConfig.api_key">🌐 API {{ augConfig.api_key ? '' : '(API Key Needed)' }}</option>
+                </select>
+                <button 
+                  class="cell-export-btn" 
+                  @click="exportCell(cell.concept_id)"
+                  :disabled="translationMode === 'api' && !augConfig.api_key"
+                >
+                  {{ translationMode !== 'none' ? '🌐 Export + Translate' : '📥 Export' }}
                 </button>
               </div>
             </div>
@@ -169,95 +263,9 @@
       </div>
     </div>
 
-    <!-- Quality Report -->
     <div v-if="qualityReport" class="report-section">
       <h3>📈 Quality Report</h3>
       <div class="report-content" v-html="qualityReport"></div>
-    </div>
-
-    <!-- Cross-Lingual Augmentation Panel -->
-    <div class="augmentation-section">
-      <div class="section-header">
-        <h3>🌐 Cross-Lingual Augmentation</h3>
-        <span class="aug-badge" :class="augStatus.is_running ? 'running' : 'ready'">
-          {{ augStatus.is_running ? '⏳ Running...' : '✅ Ready' }}
-        </span>
-      </div>
-      
-      <p class="aug-description">
-        Generate cross-lingual training data by translating FED→中文 and PBOC→English using LLM APIs.
-        This solves the "knowledge silo" problem.
-      </p>
-      
-      <div class="aug-stats">
-        <div class="stat-chip fed">FED: {{ augStatus.fed_count }} records</div>
-        <div class="stat-chip pboc">PBOC: {{ augStatus.pboc_count }} records</div>
-        <div v-if="augStatus.latest_output" class="stat-chip output">
-          Latest: {{ augStatus.latest_output }}
-        </div>
-      </div>
-      
-      <div class="aug-form">
-        <div class="form-row">
-          <label>API Provider:</label>
-          <select v-model="augConfig.provider" class="aug-select">
-            <option value="openai">OpenAI</option>
-            <option value="gemini">Gemini</option>
-          </select>
-        </div>
-        
-        <div class="form-row">
-          <label>API Key:</label>
-          <input 
-            type="password" 
-            v-model="augConfig.api_key" 
-            placeholder="sk-xxx or AIza..."
-            class="aug-input"
-          />
-        </div>
-        
-        <div class="form-row">
-          <label>Model:</label>
-          <input 
-            type="text" 
-            v-model="augConfig.model" 
-            :placeholder="augConfig.provider === 'openai' ? 'gpt-4o-mini' : 'gemini-1.5-flash'"
-            class="aug-input"
-          />
-        </div>
-        
-        <div class="form-row">
-          <label>Ratio ({{ Math.round(augConfig.ratio * 100) }}% augmented):</label>
-          <input 
-            type="range" 
-            v-model="augConfig.ratio" 
-            min="0.1" 
-            max="0.5" 
-            step="0.05"
-            class="aug-slider"
-          />
-        </div>
-        
-        <div class="form-actions">
-          <button 
-            class="run-aug-btn" 
-            @click="runAugmentation"
-            :disabled="augStatus.is_running || !augConfig.api_key"
-          >
-            🚀 Run Augmentation
-          </button>
-          <button 
-            class="refresh-status-btn"
-            @click="loadAugmentationStatus"
-          >
-            🔄 Refresh Status
-          </button>
-        </div>
-        
-        <div v-if="augStatus.message" class="aug-message" :class="augStatus.is_running ? 'info' : 'success'">
-          {{ augStatus.message }}
-        </div>
-      </div>
     </div>
   </div>
 </template>
@@ -291,6 +299,9 @@ const augConfig = ref({
   ratio: 0.3,
   batch_size: 5
 })
+
+// Translation mode: 'none', 'local', 'api'
+const translationMode = ref('none')
 
 const stats = computed(() => {
   if (cells.value.length === 0) {
@@ -347,9 +358,59 @@ const selectedFormat = ref('alpaca')
 const selectedLang = ref('en')
 const bulkFormat = ref('alpaca')
 
-const exportCell = (conceptId) => {
-  const url = `${API_BASE}/api/v1/alignment/cell/${conceptId}/export?format=${selectedFormat.value}&lang=${selectedLang.value}`
-  window.open(url, '_blank')
+const exportCell = async (conceptId) => {
+  if (translationMode.value === 'none') {
+    // Standard export without translation
+    const url = `${API_BASE}/api/v1/alignment/cell/${conceptId}/export?format=${selectedFormat.value}&lang=${selectedLang.value}`
+    window.open(url, '_blank')
+  } else if (translationMode.value === 'local') {
+    // Local translation using argostranslate (no API required)
+    try {
+      const response = await axios.post(
+        `${API_BASE}/api/v1/alignment/cell/${conceptId}/export/local-translate`,
+        {
+          format: selectedFormat.value,
+          lang: selectedLang.value
+        },
+        { responseType: 'blob' }
+      )
+      
+      const blob = new Blob([response.data], { type: 'application/json' })
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${conceptId}_${selectedFormat.value}_${selectedLang.value}_local.jsonl`
+      a.click()
+      window.URL.revokeObjectURL(url)
+    } catch (err) {
+      alert(`Local translation failed: ${err.response?.data?.detail || err.message}`)
+    }
+  } else if (translationMode.value === 'api' && augConfig.value.api_key) {
+    // API translation using OpenAI/Gemini
+    try {
+      const response = await axios.post(
+        `${API_BASE}/api/v1/alignment/cell/${conceptId}/export/cross-lingual`,
+        {
+          format: selectedFormat.value,
+          lang: selectedLang.value,
+          provider: augConfig.value.provider,
+          api_key: augConfig.value.api_key,
+          model: augConfig.value.model
+        },
+        { responseType: 'blob' }
+      )
+      
+      const blob = new Blob([response.data], { type: 'application/json' })
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${conceptId}_${selectedFormat.value}_${selectedLang.value}_api.jsonl`
+      a.click()
+      window.URL.revokeObjectURL(url)
+    } catch (err) {
+      alert(`API translation failed: ${err.response?.data?.detail || err.message}`)
+    }
+  }
 }
 
 // Bulk LLM format export
@@ -850,6 +911,50 @@ onMounted(() => {
   flex-wrap: wrap;
 }
 
+/* Cross-Lingual Checkbox Option */
+.cross-lingual-option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  color: white;
+  transition: all 0.3s;
+}
+
+/* Translation Mode Dropdown */
+.translation-mode-select {
+  padding: 8px 12px;
+  border: 2px solid #3b82f6;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+  color: #1e40af;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  outline: none;
+  transition: all 0.3s;
+}
+
+.translation-mode-select:hover {
+  border-color: #1d4ed8;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+}
+
+.translation-mode-select:focus {
+  border-color: #1d4ed8;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+}
+
+.translation-mode-select option {
+  background: white;
+  color: #1e293b;
+}
+
 .format-select, .lang-select {
   padding: 8px 12px;
   border: 2px solid #f59e0b;
@@ -1014,6 +1119,12 @@ onMounted(() => {
 .aug-select:focus, .aug-input:focus {
   border-color: #3b82f6;
   background: rgba(255, 255, 255, 0.15);
+}
+
+/* Fix dropdown option text color for native dropdown menus */
+.aug-select option {
+  background: white;
+  color: #1e293b;
 }
 
 .aug-slider {

@@ -614,6 +614,272 @@ async def export_single_cell(concept_id: str, format: str = "jsonl", lang: str =
     )
 
 
+# ==================== LOCAL TRANSLATION (ARGOSTRANSLATE) ====================
+
+class LocalTranslateRequest(BaseModel):
+    """Request body for local translation export."""
+    format: str = "sharegpt"
+    lang: str = "zh"
+
+
+def translate_with_argos(text: str, source_lang: str, target_lang: str) -> str:
+    """
+    Translate text using argostranslate (offline neural MT).
+    
+    Requires: pip install argostranslate
+    Models: Download from https://www.argosopentech.com/argospm/index/
+    
+    Returns original text if translation fails.
+    """
+    try:
+        import argostranslate.translate
+        
+        # Try to translate
+        translated = argostranslate.translate.translate(text, source_lang, target_lang)
+        return translated if translated else text
+    
+    except ImportError:
+        print("[WARN] argostranslate not installed. Install with: pip install argostranslate")
+        return text
+    except Exception as e:
+        print(f"[WARN] Argos translation failed: {e}")
+        return text
+
+
+@router.post("/alignment/cell/{concept_id}/export/local-translate")
+async def export_cell_local_translate(concept_id: str, request: LocalTranslateRequest):
+    """
+    Export a single Knowledge Cell with local translation using argostranslate.
+    
+    This is a FREE translation option that doesn't require API keys.
+    Requires argostranslate library and language models to be installed.
+    
+    Install: pip install argostranslate
+    Then download models for your language pair.
+    """
+    jsonl_path = find_latest_jsonl()
+    if not jsonl_path:
+        raise HTTPException(status_code=404, detail="No alignment data found")
+    
+    cells = load_cells_from_jsonl(jsonl_path)
+    cell = next((c for c in cells if c.get('concept_id') == concept_id), None)
+    if not cell:
+        raise HTTPException(status_code=404, detail=f"Cell not found: {concept_id}")
+    
+    policy_evidence = cell.get('policy_evidence', [])
+    definitions = cell.get('definitions', {})
+    primary_term = cell.get('primary_term', '')
+    
+    results = []
+    
+    for evidence in policy_evidence:
+        source = evidence.get('source', '').lower()
+        text = evidence.get('text', '')[:500]
+        
+        # Determine if translation is needed
+        needs_translation = (request.lang == 'zh' and source == 'fed') or \
+                           (request.lang == 'en' and source == 'pboc')
+        
+        if needs_translation:
+            source_lang = 'en' if source == 'fed' else 'zh'
+            translated_text = translate_with_argos(text, source_lang, request.lang)
+            
+            # If translation failed (returned same text), add a note
+            if translated_text == text:
+                translated_text = f"[Translation unavailable] {text}"
+            
+            term = definitions.get(request.lang, {}).get('term', primary_term)
+            conversation = {
+                "conversations": [
+                    {"from": "human", "value": get_template(request.lang, "policy_question").format(term=term)},
+                    {"from": "gpt", "value": translated_text}
+                ]
+            }
+            results.append(conversation)
+    
+    # Include native content (no metadata)
+    native_result = convert_cell_to_format(cell, request.format, request.lang)
+    if isinstance(native_result, list):
+        for item in native_result:
+            # Remove any metadata if present
+            if isinstance(item, dict) and 'metadata' in item:
+                del item['metadata']
+            results.append(item)
+    else:
+        if isinstance(native_result, dict) and 'metadata' in native_result:
+            del native_result['metadata']
+        results.append(native_result)
+    
+    content = json.dumps(results, ensure_ascii=False, indent=2)
+    filename = f"{concept_id}_{request.format}_{request.lang}_local.jsonl"
+    
+    return StreamingResponse(
+        io.BytesIO(content.encode('utf-8')),
+        media_type="application/json",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+
+class CrossLingualExportRequest(BaseModel):
+    """Request body for cross-lingual cell export."""
+    format: str = "sharegpt"
+    lang: str = "zh"
+    provider: str = "openai"
+    api_key: str = ""
+    model: str = ""
+
+
+@router.post("/alignment/cell/{concept_id}/export/cross-lingual")
+async def export_cell_cross_lingual(concept_id: str, request: CrossLingualExportRequest):
+    """
+    Export a single Knowledge Cell with cross-lingual LLM translation.
+    
+    This endpoint generates bilingual training data by:
+    1. Including native language content
+    2. Using LLM API to translate/analyze content in the target language
+    
+    Args:
+        concept_id: The concept ID (e.g., TERM_1)
+        request.format: Export format (alpaca, sharegpt, etc.)
+        request.lang: Target language for translation
+        request.provider: LLM API provider (openai/gemini)
+        request.api_key: API key for LLM service
+        request.model: Model name (optional)
+    """
+    import httpx
+    
+    if not request.api_key:
+        raise HTTPException(status_code=400, detail="API key is required for cross-lingual export")
+    
+    jsonl_path = find_latest_jsonl()
+    if not jsonl_path:
+        raise HTTPException(status_code=404, detail="No alignment data found")
+    
+    cells = load_cells_from_jsonl(jsonl_path)
+    cell = next((c for c in cells if c.get('concept_id') == concept_id), None)
+    if not cell:
+        raise HTTPException(status_code=404, detail=f"Cell not found: {concept_id}")
+    
+    # Get policy evidence that needs translation
+    policy_evidence = cell.get('policy_evidence', [])
+    definitions = cell.get('definitions', {})
+    primary_term = cell.get('primary_term', '')
+    
+    # Determine translation direction
+    # If lang=zh and source=fed, translate FED->ZH
+    # If lang=en and source=pboc, translate PBOC->EN
+    results = []
+    
+    for evidence in policy_evidence:
+        source = evidence.get('source', '').lower()
+        text = evidence.get('text', '')[:500]
+        
+        # Check if cross-lingual translation is needed
+        needs_translation = (request.lang == 'zh' and source == 'fed') or \
+                           (request.lang == 'en' and source == 'pboc')
+        
+        if needs_translation:
+            # Call LLM API for translation
+            translated_text = await call_llm_translation(
+                text=text,
+                source_lang='en' if source == 'fed' else 'zh',
+                target_lang=request.lang,
+                term=definitions.get(request.lang, {}).get('term', primary_term),
+                provider=request.provider,
+                api_key=request.api_key,
+                model=request.model
+            )
+            
+            if translated_text:
+                term = definitions.get(request.lang, {}).get('term', primary_term)
+                conversation = {
+                    "conversations": [
+                        {"from": "human", "value": get_template(request.lang, "policy_question").format(term=term)},
+                        {"from": "gpt", "value": translated_text}
+                    ]
+                }
+                results.append(conversation)
+    
+    # Include native content (no metadata)
+    native_result = convert_cell_to_format(cell, request.format, request.lang)
+    if isinstance(native_result, list):
+        for item in native_result:
+            if isinstance(item, dict) and 'metadata' in item:
+                del item['metadata']
+            results.append(item)
+    else:
+        if isinstance(native_result, dict) and 'metadata' in native_result:
+            del native_result['metadata']
+        results.append(native_result)
+    
+    content = json.dumps(results, ensure_ascii=False, indent=2)
+    filename = f"{concept_id}_{request.format}_{request.lang}_crosslingual.jsonl"
+    
+    return StreamingResponse(
+        io.BytesIO(content.encode('utf-8')),
+        media_type="application/json",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+
+async def call_llm_translation(
+    text: str,
+    source_lang: str,
+    target_lang: str,
+    term: str,
+    provider: str,
+    api_key: str,
+    model: str = ""
+) -> str:
+    """Call LLM API to translate financial text."""
+    import httpx
+    
+    # Build prompt based on direction
+    if target_lang == 'zh':
+        system = "你是一位资深中国宏观经济学家。请用专业的中文金融术语翻译并分析以下美联储政策文本。"
+        user = f"请将以下美联储政策声明翻译成专业中文，并结合'{term}'的概念进行简要分析：\n\n{text}"
+    else:
+        system = "You are a senior Wall Street analyst. Translate and analyze this PBOC policy text in professional English."
+        user = f"Translate this PBOC policy statement into professional English, with analysis relevant to '{term}':\n\n{text}"
+    
+    try:
+        if provider == "openai":
+            url = "https://api.openai.com/v1/chat/completions"
+            headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+            payload = {
+                "model": model or "gpt-4o-mini",
+                "messages": [
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user}
+                ],
+                "temperature": 0.7,
+                "max_tokens": 800
+            }
+            
+            async with httpx.AsyncClient() as client:
+                response = await client.post(url, json=payload, headers=headers, timeout=60)
+                if response.status_code == 200:
+                    return response.json()['choices'][0]['message']['content']
+        
+        elif provider == "gemini":
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model or 'gemini-1.5-flash'}:generateContent"
+            params = {"key": api_key}
+            payload = {
+                "contents": [{"role": "user", "parts": [{"text": f"{system}\n\n{user}"}]}],
+                "generationConfig": {"temperature": 0.7, "maxOutputTokens": 800}
+            }
+            
+            async with httpx.AsyncClient() as client:
+                response = await client.post(url, json=payload, params=params, timeout=60)
+                if response.status_code == 200:
+                    return response.json()['candidates'][0]['content']['parts'][0]['text']
+    
+    except Exception as e:
+        print(f"[WARN] LLM translation failed: {e}")
+    
+    return ""
+
+
 @router.get("/alignment/export/llm/{format_type}")
 async def export_all_llm_format(format_type: str, lang: str = "en"):
     """

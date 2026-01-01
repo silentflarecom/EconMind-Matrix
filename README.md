@@ -785,7 +785,50 @@ pandas>=2.0.0                   # Data export
 | Export Scripts | 🔧 Framework | `scripts/export_dataset.py` |
 | Documentation | ✅ Complete | `docs/architecture.md`, `docs/api.md` |
 
-### Latest Updates (2024-12-29)
+### Latest Updates (2026-01-01)
+
+**🌐 Layer 4: Cross-Lingual Augmentation & LLM Training Export**
+
+✅ **Fully Localized LLM Exports** (8 languages: EN, ZH, JA, KO, DE, FR, ES, RU)
+- All LLM training formats (Alpaca, ShareGPT, OpenAI, Dolly, Text) now use localized templates
+- Questions, instructions, and system prompts are dynamically translated per language
+- Language-source filtering: ZH exports → PBOC data only, EN exports → FED data only
+
+✅ **Cross-Lingual Augmentation Panel** (置顶于Layer 4仪表盘)
+- **3 Translation Modes**:
+  | Mode | Description | Requirements |
+  |:---|:---|:---|
+  | 📄 No Translation | Export native data only | None |
+  | 🖥️ Local (Argos) | Offline neural MT | `pip install argostranslate` |
+  | 🌐 API | LLM translation (高质量) | OpenAI/Gemini API Key |
+- Configure API provider (OpenAI/Gemini), model, and augmentation ratio
+- View FED/PBOC record counts and latest output files
+
+✅ **Per-Cell Translation Export**
+- Each Knowledge Cell can be exported with translation mode selection
+- Supports real-time LLM translation via OpenAI/Gemini API (`httpx` async calls)
+- Local translation using argostranslate (free, offline)
+
+✅ **New Backend Endpoints**:
+```
+POST /api/v1/alignment/cell/{id}/export/local-translate  # Argos offline translation
+POST /api/v1/alignment/cell/{id}/export/cross-lingual    # LLM API translation
+POST /api/v1/alignment/augmentation/run                  # Batch augmentation
+GET  /api/v1/alignment/augmentation/status               # Check status
+```
+
+✅ **Batch Cross-Lingual Augmentation Script** (`layer4_alignment/scripts/cross_lingual_augmentor.py`)
+- Async OpenAI/Gemini API calls with retry logic
+- 70/30 mixing ratio (native + augmented data)
+- ShareGPT output format with term metadata
+
+**📦 New Dependencies:**
+```bash
+pip install argostranslate  # Local offline translation
+pip install httpx           # Async HTTP for LLM APIs
+```
+
+### Previous Updates (2024-12-29)
 
 **🔧 Technical Debt Remediation Complete:**
 - ✅ Created `shared/` module with centralized utilities
@@ -795,50 +838,6 @@ pandas>=2.0.0                   # Data export
 - ✅ Added type hints to core functions
 - ✅ Environment-aware CORS configuration
 - ✅ Centralized configuration constants (`shared/config.py`)
-
-**📁 New `shared/` Module:**
-```python
-from shared.utils import clean_text
-from shared.schema import LAYER1_SQL_SCHEMA, ALL_TABLES
-from shared.errors import NotFoundError, ValidationError
-from shared.config import DEFAULT_CRAWL_INTERVAL, SUPPORTED_LANGUAGES
-```
-
-**🌐 Frontend API Configuration:**
-```javascript
-// frontend/src/services/api.js
-import { API_BASE } from './services/api'
-// Uses VITE_API_BASE_URL from .env.development or .env.production
-```
-
-### Previous Updates (2024-12-16)
-
-**🔧 Crawler Enhancements:**
-- User-Agent rotation pool (8 realistic browser UAs)
-- Proxy pool support (http/https/socks5 protocols)
-- Concurrency control (1-10 parallel requests)
-- Custom delay settings (0.5-10 seconds)
-- Manual start/stop with verification polling
-- Running crawler detection on page load
-
-**🛡️ System Page Improvements:**
-- Three-layer statistics display (Layer 1, 2, 3)
-- Separate backup buttons for each layer's database
-- All-layers reset functionality
-- Enhanced reset confirmation with layer breakdown
-
-**📊 Backup Endpoints:**
-- `GET /api/system/backup` - Layer 1 (corpus.db)
-- `GET /api/policy/backup` - Layer 2 (policy_corpus.db)
-- `GET /api/sentiment/backup` - Layer 3 (sentiment_corpus.db)
-
-### Next Actions
-
-1. **Phase 4 Integration**
-   - Unified Search across all 3 layers
-   - Integrated Dashboard/Knowledge Graph
-   - Cross-layer term linking
-
 
 ---
 
