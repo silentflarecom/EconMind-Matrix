@@ -1,0 +1,85 @@
+# Layer 4 Alignment Configuration
+# ================================
+# This file controls how the alignment engine processes data from Layers 1-3
+
+# Alignment Strategy Settings
+alignment_strategies:
+  
+  # LLM Semantic Alignment (Primary method, highest accuracy)
+  llm_semantic:
+    enabled: false                  # Set to true and configure API key to enable
+    provider: "gemini"              # Options: "gemini", "openai", "deepseek"
+    model: "gemini-1.5-flash"       # Model to use
+    api_key_env: "GEMINI_API_KEY"   # Environment variable name for API key
+    temperature: 0.1                # Low temperature for consistent scoring
+    max_tokens: 1000                # Max tokens per response
+    batch_size: 10                  # Candidates per API call
+    threshold: 0.70                 # Minimum score to keep
+    weight: 0.50                    # Contribution to final score
+  
+  # Vector Similarity Alignment (Fast, free, multilingual)
+  vector_similarity:
+    enabled: true
+    model: "sentence-transformers/paraphrase-multilingual-mpnet-base-v2"
+    device: "cpu"                   # Options: "cpu", "cuda", "mps"
+    batch_size: 32                  # Embeddings per batch
+    threshold: 0.40                 # Lowered for better coverage
+    weight: 0.30
+  
+  # Rule-Based Keyword Matching (Deterministic fallback)
+  keyword_matching:
+    enabled: true
+    use_fuzzy: true                 # Enable fuzzy matching for variants
+    fuzzy_threshold: 0.85           # Minimum fuzzy match ratio
+    tfidf_top_k: 20                 # Top keywords to consider
+    threshold: 0.35                 # Lowered for better coverage
+    weight: 0.20
+
+# Global Processing Settings
+global:
+  min_final_score: 0.40             # Lowered from 0.65 for better coverage
+  max_policy_evidence: 15           # Maximum policy paragraphs per term
+  max_sentiment_evidence: 30        # Maximum news articles per term
+  sentiment_time_window_days: 365   # Extended for testing (was 90)
+
+# Language Configuration
+languages:
+  # Priority order for multi-language processing
+  priority:
+    - en      # English (always first)
+    - zh      # Chinese (Simplified)
+    - zh-tw   # Chinese (Traditional)
+    - ja      # Japanese
+    - ko      # Korean
+    - fr      # French
+    - de      # German
+    - es      # Spanish
+    - ru      # Russian
+    - pt      # Portuguese
+    - ar      # Arabic
+    - hi      # Hindi
+    - it      # Italian
+    - nl      # Dutch
+    - pl      # Polish
+    - tr      # Turkish
+    - vi      # Vietnamese
+    - th      # Thai
+    - id      # Indonesian
+    - ms      # Malay
+  
+  fallback_language: "en"
+
+# Output Settings
+output:
+  format: "jsonl"                   # Primary format: jsonl, json, csv
+  output_dir: "dataset"             # Output directory (relative to project root)
+  filename_template: "aligned_corpus_{date}"
+  include_metadata: true            # Include generation metadata
+  compress: false                   # Generate .gz compressed files
+
+# Quality Reporting
+quality_report:
+  enabled: true
+  output_path: "dataset/quality_report.md"
+  include_top_n: 10                 # Top N cells to highlight
+  include_low_score_n: 10           # Low score cells to flag

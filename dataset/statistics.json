@@ -1,0 +1,27 @@
+{
+  "export_date": "2025-12-30T14:35:40.948860",
+  "export_version": "1.0",
+  "layer1": {
+    "total_terms": 0,
+    "total_tasks": 0,
+    "total_associations": 0,
+    "language_coverage": {}
+  },
+  "layer2": {
+    "total_reports": 0,
+    "total_paragraphs": 0,
+    "total_alignments": 0,
+    "reports_by_source": {}
+  },
+  "layer3": {
+    "total_articles": 0,
+    "total_annotations": 0,
+    "sentiment_distribution": {},
+    "articles_by_source": {}
+  },
+  "summary": {
+    "total_layer1_terms": 0,
+    "total_layer2_reports": 0,
+    "total_layer3_articles": 0
+  }
+}

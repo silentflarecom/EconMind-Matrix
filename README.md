@@ -299,22 +299,444 @@ See [SETUP.md](SETUP.md) for details.
   - [x] **Force stop** with verification polling
   - [x] **Proxy pool configuration UI**
 
-### 🎯 Phase 4: Three-Layer Integration (February 2026)
+### 🎯 Phase 4: Offline Multi-Dimensional Semantic Alignment Pipeline (January-February 2026)
 
-- [ ] **Unified API**
-  - [ ] `/api/v1/search/{term}` → Returns three-layer data
-  - [ ] `/api/v1/trend/{term}` → Returns time series data
-  - [ ] Layer 2 `/policy/search/{term}` already implemented
+> **Critical Distinction**: Layer 4 is **NOT a user interface** - it is an **offline batch processing engine** that consumes completed data from Layers 1-3 and produces publication-ready aligned datasets.
 
-- [ ] **Integrated Interface**
-  - [ ] Three-column layout (Definition | Policy | Sentiment)
-  - [ ] Interactive knowledge graph with policy links
-  - [ ] Trend chart visualization
+---
 
-- [ ] **Dataset Export**
-  - [x] Export script structure (`scripts/export_dataset.py`)
-  - [ ] Complete dataset packaging
-  - [ ] Statistics report generation
+#### 🏭 Architectural Role: The "Alignment Factory"
+
+**Input → Process → Output Model:**
+```
+Layer 1 Data (corpus.db)  ──┐
+Layer 2 Data (corpus.db)  ──┼──→ Alignment Engine ──→ Unified Dataset File
+Layer 3 Data (corpus.db)  ──┘   (Batch Pipeline)       (aligned_corpus.jsonl)
+```
+
+**What Layer 4 Does:**
+1. **Enumerates** all successfully crawled terms from Layer 1
+2. **Searches** Layer 2/3 for content related to each term (across ALL supported languages)
+3. **Aligns** using multiple strategies (LLM, vectors, rules) to determine semantic relevance
+4. **Aggregates** aligned evidence into structured "Knowledge Cells"
+5. **Exports** publication-ready datasets in standardized formats (JSONL, CSV, etc.)
+6. **Reports** data quality metrics (coverage, alignment scores, language distribution)
+
+**What Layer 4 Does NOT Do:**
+- ❌ Provide real-time user search interfaces (that's the frontend's job)
+- ❌ Store data in its own database (reads from Layer 1-3 databases)
+- ❌ Crawl or collect raw data (Layers 1-3 handle this)
+
+---
+
+#### 🗂️ Module Structure
+
+```
+layer4_alignment/
+├── backend/
+│   ├── alignment_engine.py       # Core orchestration logic
+│   ├── data_loader.py             # Load data from Layer 1-3 databases
+│   ├── knowledge_cell.py          # Knowledge Cell data model (Pydantic)
+│   ├── aligners/                  # Pluggable alignment strategies
+│   │   ├── llm_aligner.py         # Gemini/GPT-4 semantic judgment
+│   │   ├── vector_aligner.py      # Sentence-BERT cosine similarity
+│   │   ├── rule_aligner.py        # Keyword + TF-IDF matching
+│   │   └── hybrid_aligner.py      # Weighted ensemble of above methods
+│   ├── exporters/
+│   │   ├── jsonl_exporter.py      # JSONL dataset export
+│   │   ├── csv_exporter.py        # Spreadsheet-friendly export
+│   │   └── quality_reporter.py    # Statistics and quality metrics
+│   └── utils/
+│       ├── wikidata_client.py     # Fetch Wikidata QIDs for terms
+│       └── text_processor.py      # Multilingual text normalization
+├── config/
+│   ├── alignment_config.yaml      # Alignment strategy settings
+│   └── language_support.yaml      # Language priority and mappings
+├── scripts/
+│   ├── run_full_alignment.py      # Batch process all terms
+│   ├── incremental_update.py      # Process newly added terms only
+│   └── validate_output.py         # Verify dataset integrity
+└── README.md
+```
+
+---
+
+#### ⚙️ Alignment Strategies (Multi-Method Ensemble)
+
+Layer 4 employs **4 complementary alignment methods** to maximize accuracy:
+
+##### 1. **LLM Semantic Alignment** (Primary, Weight: 50%)
+- **Model**: Gemini 1.5 Pro / GPT-4 Turbo
+- **Method**: Present term definition + candidate texts to LLM, ask for relevance scoring (0-1)
+- **Prompt Example**:
+  ```
+  Term: "Inflation" (Definition: In economics, inflation is a general rise in prices...)
+  
+  Rate each policy paragraph's relevance to this concept (0-1 scale):
+  [0] "Current inflation remains moderate, CPI rose 0.4% YoY..."  → Score: ?
+  [1] "Export growth accelerated in Q3..."                        → Score: ?
+  ```
+- **Advantages**: Understands context, handles paraphrasing, detects conceptual matches
+- **Limitations**: API costs, rate limits, requires careful prompt engineering
+
+##### 2. **Vector Similarity Alignment** (Secondary, Weight: 30%)
+- **Model**: `sentence-transformers/paraphrase-multilingual-mpnet-base-v2`
+- **Method**: 
+  1. Encode term definition into 768-dim vector
+  2. Encode each candidate paragraph/article into vectors
+  3. Calculate cosine similarity
+  4. Accept matches above threshold (e.g., >0.65)
+- **Advantages**: Fast, free, works offline, multilingual support
+- **Limitations**: May miss conceptual matches if wording differs significantly
+
+##### 3. **Rule-Based Keyword Matching** (Fallback, Weight: 15%)
+- **Method**:
+  1. Extract keywords from term (+ synonyms from Layer 1's `related_terms`)
+  2. Calculate TF-IDF scores in candidate texts
+  3. Fuzzy matching for inflected forms (e.g., "inflate" → "inflation")
+- **Advantages**: Explainable, deterministic, no API dependencies
+- **Limitations**: Purely lexical, misses semantic equivalents
+
+##### 4. **Hybrid Ensemble** (Weight: 5% as tie-breaker)
+- **Method**: Weighted vote of above 3 methods
+- **Formula**: `Final_Score = 0.50×LLM + 0.30×Vector + 0.15×Rule + 0.05×Ensemble_Bonus`
+- **Ensemble Bonus**: +0.05 if all 3 methods agree (high confidence indicator)
+
+**Filtering Threshold**: Only matches with `Final_Score ≥ 0.65` are included in the Knowledge Cell.
+
+---
+
+#### 📐 Knowledge Cell Data Model
+
+Each term produces **one Knowledge Cell**, which is the atomic unit of the aligned dataset:
+
+```json
+{
+  "concept_id": "Q17127698",                    // Wikidata QID (or TERM_<id> if unavailable)
+  "primary_term": "Inflation",                  // English canonical term
+  
+  "definitions": {                              // Layer 1: Multilingual definitions
+    "en": {
+      "term": "Inflation",
+      "summary": "In economics, inflation is a general rise in the price level...",
+      "url": "https://en.wikipedia.org/wiki/Inflation",
+      "source": "Wikipedia"
+    },
+    "zh": {
+      "term": "通货膨胀",
+      "summary": "通货膨胀是指一般物价水平在一定时期内持续上涨...",
+      "url": "https://zh.wikipedia.org/wiki/通货膨胀",
+      "source": "Wikipedia"
+    },
+    "ja": {...},
+    "ko": {...}
+    // All languages supported by Layer 1
+  },
+  
+  "policy_evidence": [                          // Layer 2: Aligned policy paragraphs
+    {
+      "source": "pboc",
+      "paragraph_id": 42,
+      "text": "当前通胀保持温和，CPI同比上涨0.4%，核心CPI上涨0.3%...",
+      "topic": "price_stability",
+      "alignment_scores": {
+        "llm": 0.92,
+        "vector": 0.78,
+        "rule": 0.85,
+        "final": 0.88
+      },
+      "alignment_method": "hybrid_ensemble",
+      "report_metadata": {
+        "title": "2024年第三季度中国货币政策执行报告",
+        "date": "2024-11-08",
+        "section": "Part II: Monetary Policy Operations"
+      }
+    },
+    {
+      "source": "fed",
+      "paragraph_id": 156,
+      "text": "Prices continued to rise modestly across most districts. Retail prices increased...",
+      "topic": "inflation",
+      "alignment_scores": {...},
+      "report_metadata": {...}
+    }
+  ],
+  
+  "sentiment_evidence": [                       // Layer 3: Aligned news articles
+    {
+      "article_id": 1523,
+      "title": "Fed signals slower pace of rate cuts amid sticky inflation",
+      "source": "Bloomberg",
+      "url": "https://www.bloomberg.com/...",
+      "published_date": "2024-12-13",
+      "sentiment": {
+        "label": "bearish",
+        "confidence": 0.82,
+        "annotator": "gemini-1.5-flash"
+      },
+      "alignment_scores": {
+        "llm": 0.95,
+        "vector": 0.89,
+        "rule": 0.72,
+        "final": 0.91
+      }
+    },
+    {...}
+  ],
+  
+  "metadata": {
+    "created_at": "2025-01-15T10:23:45Z",
+    "alignment_engine_version": "4.0.0",
+    "quality_metrics": {
+      "overall_score": 0.87,              // Weighted avg of all alignment scores
+      "language_coverage": 8,              // Number of languages with definitions
+      "policy_evidence_count": 12,         // PBOC + Fed paragraphs aligned
+      "sentiment_evidence_count": 25,      // News articles aligned (last 90 days)
+      "avg_policy_score": 0.84,
+      "avg_sentiment_score": 0.89
+    }
+  }
+}
+```
+
+---
+
+#### 🔧 Configuration System
+
+**File**: `layer4_alignment/config/alignment_config.yaml`
+
+```yaml
+# Alignment Strategy Settings
+alignment_strategies:
+  llm_semantic:
+    enabled: true
+    provider: "gemini"              # or "openai", "deepseek"
+    model: "gemini-1.5-pro"
+    api_key_env: "GEMINI_API_KEY"
+    temperature: 0.1
+    max_tokens: 500
+    batch_size: 10                  # Process 10 candidates per LLM call
+    threshold: 0.70
+    weight: 0.50
+    
+  vector_similarity:
+    enabled: true
+    model: "sentence-transformers/paraphrase-multilingual-mpnet-base-v2"
+    device: "cuda"                  # or "cpu"
+    threshold: 0.65
+    weight: 0.30
+    
+  keyword_matching:
+    enabled: true
+    use_fuzzy: true
+    fuzzy_threshold: 0.85
+    tfidf_top_k: 20
+    threshold: 0.60
+    weight: 0.15
+
+# Global Settings
+global:
+  min_final_score: 0.65             # Discard alignments below this
+  max_policy_evidence: 15           # Top N policy paragraphs per term
+  max_sentiment_evidence: 30        # Top N news articles per term
+  sentiment_time_window_days: 90    # Only recent news
+  
+# Language Support (inherits from Layer 1)
+languages:
+  priority: ["en", "zh", "ja", "ko", "fr", "de", "es", "ru"]
+  fallback_language: "en"
+
+# Output Settings
+output:
+  format: "jsonl"                   # or "json", "csv"
+  output_dir: "dataset"
+  filename_template: "aligned_corpus_v{version}_{date}.jsonl"
+  include_metadata: true
+  compress: false                   # Set true to generate .jsonl.gz
+
+# Quality Reporting
+quality_report:
+  enabled: true
+  output_path: "dataset/quality_report.md"
+  visualizations: true              # Generate charts if matplotlib available
+```
+
+---
+
+#### 🚀 Execution Workflow
+
+**Full Alignment Run** (one-time or periodic):
+```bash
+cd layer4_alignment
+python scripts/run_full_alignment.py --config config/alignment_config.yaml
+```
+
+**Console Output Example**:
+```
+========================================
+Layer 4 Alignment Engine v4.0.0
+========================================
+[INFO] Loading configuration from alignment_config.yaml
+[INFO] Initializing aligners: LLM (Gemini) + Vector (SBERT) + Rule
+[INFO] Loading Layer 1 terms from corpus.db... Found 287 terms
+[INFO] Loading Layer 2 policy corpus... 1,234 paragraphs (PBOC: 623, Fed: 611)
+[INFO] Loading Layer 3 news articles... 4,567 articles (last 90 days)
+
+[1/287] Aligning term: "Inflation" (8 languages)
+  ├─ Layer 2: Found 45 candidate paragraphs
+  │   ├─ LLM filtering: 12 relevant (scores 0.70-0.95)
+  │   ├─ Vector filtering: 18 relevant (scores 0.65-0.88)
+  │   └─ Ensemble: 14 final matches (avg score 0.84)
+  ├─ Layer 3: Found 128 candidate articles
+  │   └─ Ensemble: 27 final matches (avg score 0.87)
+  └─ Knowledge Cell quality: 0.86 ✓
+
+[2/287] Aligning term: "GDP" (7 languages)
+  ...
+
+[287/287] Aligning term: "Quantitative Easing" (5 languages)
+  └─ Knowledge Cell quality: 0.79 ✓
+
+========================================
+Alignment Complete!
+========================================
+Output: dataset/aligned_corpus_v1_2025-01-15.jsonl
+Total Knowledge Cells: 287
+Avg Quality Score: 0.82
+Time Elapsed: 2h 34m
+
+Generating quality report... ✓
+Report saved to: dataset/quality_report.md
+```
+
+**Incremental Update** (for newly added terms):
+```bash
+python scripts/incremental_update.py --since "2025-01-15"
+```
+
+---
+
+#### 📊 Output Dataset Formats
+
+##### Format 1: JSONL (Primary, ML-Ready)
+- **File**: `aligned_corpus_v1_2025-01-15.jsonl`
+- **Structure**: One Knowledge Cell per line (newline-delimited JSON)
+- **Size**: ~500 KB per 100 terms (uncompressed)
+- **Use Case**: LLM fine-tuning, batch processing, streaming ingestion
+
+##### Format 2: CSV (Analysis-Friendly)
+- **File**: `aligned_corpus_v1_2025-01-15.csv`
+- **Columns**:
+  ```
+  concept_id, term_en, term_zh, term_ja, ..., 
+  policy_count, sentiment_count, quality_score, 
+  top_policy_source, top_sentiment_label
+  ```
+- **Use Case**: Excel analysis, Pandas dataframes, visualization
+
+##### Format 3: Quality Report (Markdown)
+- **File**: `quality_report.md`
+- **Contents**:
+  - Overall statistics (total cells, avg scores, language distribution)
+  - Top 10 highest quality cells
+  - Bottom 10 cells requiring manual review
+  - Alignment method performance comparison
+  - Visualizations (if enabled): bar charts, heatmaps
+
+---
+
+#### 📈 Success Metrics
+
+| Metric | Target | Description |
+|:---|:---:|:---|
+| **Coverage Rate** | ≥ 80% | % of Layer 1 terms with aligned Layer 2+3 data |
+| **Avg Alignment Score** | ≥ 0.75 | Mean of all `final_score` values |
+| **Language Completeness** | ≥ 5 langs/term | Average languages with definitions per cell |
+| **Policy Evidence Density** | ≥ 3 paragraphs/term | Avg aligned policy paragraphs per cell |
+| **Sentiment Evidence Density** | ≥ 10 articles/term | Avg aligned news articles per cell |
+| **Processing Speed** | ≤ 30s/term | Time to align one term (all layers) |
+
+---
+
+#### 🔄 Integration with Other Phases
+
+**Inputs from Previous Phases:**
+- **Layer 1** → Provides canonical terms + multilingual definitions + Wikidata QIDs
+- **Layer 2** → Provides policy paragraphs tagged with topics
+- **Layer 3** → Provides sentiment-annotated news + trend data
+
+**Outputs for Next Phase:**
+- **Phase 5** → Publication-ready datasets for competition submission
+- **Frontend** → (Optional) Pre-computed aligned data for fast UI loading
+- **External Users** → High-quality training data for domain-specific LLMs
+
+---
+
+#### 🛠️ Technical Requirements
+
+**Dependencies:**
+```txt
+# Core
+pydantic>=2.5.0
+pyyaml>=6.0
+aiosqlite>=0.19.0
+
+# Alignment Methods
+google-generativeai>=0.3.0      # Gemini API
+openai>=1.6.0                   # GPT-4 API (optional)
+sentence-transformers>=2.2.0    # Vector embeddings
+scikit-learn>=1.3.0             # TF-IDF, cosine similarity
+
+# Utilities
+requests>=2.31.0                # Wikidata API
+tqdm>=4.66.0                    # Progress bars
+pandas>=2.0.0                   # Data export
+```
+
+**Hardware Recommendations:**
+- **CPU**: 4+ cores (for parallel processing)
+- **RAM**: 8GB+ (for embedding model caching)
+- **GPU**: Optional but recommended for vector embeddings (CUDA-compatible)
+- **Storage**: 2GB for models + 500MB for output datasets
+
+---
+
+#### 🎯 Deliverables (Phase 4 Completion Checklist)
+
+- [ ] **Core Engine**
+  - [ ] `AlignmentEngine` class with multi-strategy support
+  - [ ] `KnowledgeCell` Pydantic model with full schema
+  - [ ] Database loaders for Layer 1/2/3
+  - [ ] Wikidata QID fetcher and cacher
+
+- [ ] **Alignment Strategies**
+  - [ ] LLM aligner (Gemini + fallback to GPT-4)
+  - [ ] Vector aligner (Sentence-BERT)
+  - [ ] Rule-based aligner (keyword + TF-IDF)
+  - [ ] Hybrid ensemble aggregator
+
+- [ ] **Export System**
+  - [ ] JSONL exporter with compression support
+  - [ ] CSV exporter with multilingual handling
+  - [ ] Quality report generator (Markdown + charts)
+
+- [ ] **Scripts & Tools**
+  - [ ] Full alignment runner (`run_full_alignment.py`)
+  - [ ] Incremental updater (`incremental_update.py`)
+  - [ ] Output validator (`validate_output.py`)
+  - [ ] Configuration validator
+
+- [ ] **Documentation**
+  - [ ] README.md with usage examples
+  - [ ] Configuration guide (YAML options explained)
+  - [ ] Alignment strategy comparison table
+  - [ ] Troubleshooting guide
+
+- [ ] **Testing & Validation**
+  - [ ] Unit tests for each aligner
+  - [ ] Integration test with sample data
+  - [ ] Performance benchmarks
+  - [ ] Output schema validation
 
 ### 🏆 Phase 5: Competition Submission (March 2026)
 

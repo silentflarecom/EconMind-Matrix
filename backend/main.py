@@ -138,6 +138,14 @@ if LAYER3_AVAILABLE:
     app.include_router(sentiment_router, prefix="/api/sentiment", tags=["sentiment"])
     print("✓ Layer 3 Sentiment routes registered at /api/sentiment")
 
+# Include Layer 4 Alignment API
+try:
+    from alignment_api import router as alignment_router
+    app.include_router(alignment_router, prefix="/api/v1", tags=["alignment"])
+    print("✓ Layer 4 Alignment API routes registered at /api/v1/alignment")
+except ImportError as e:
+    print(f"⚠ Layer 4 Alignment API not available: {e}")
+
 # Initialize Wikipedia API
 # User-Agent is explicitly set to comply with Wikimedia User-Agent Policy
 # https://meta.wikimedia.org/wiki/User-Agent_policy

@@ -7,8 +7,9 @@ import ProgressMonitor from './components/ProgressMonitor.vue'
 import ResultsTable from './components/ResultsTable.vue'
 import PolicyCompare from './components/PolicyCompare.vue'
 import SentimentAnalysis from './components/SentimentAnalysis.vue'
+import AlignmentDashboard from './components/AlignmentDashboard.vue'
 
-// Active view: 'layer1', 'layer2', or 'system'
+// Active view: 'layer1', 'layer2', 'layer3', 'layer4', or 'system'
 const activeView = ref('layer1')
 
 // Layer 1 sub-tabs: 'search', 'batch', 'results', 'tasks'
@@ -277,6 +278,17 @@ const getStatusColor = (status) => {
           ]"
         >
           📰 Layer 3: Sentiment
+        </button>
+        <button
+          @click="activeView = 'layer4'"
+          :class="[
+            'px-8 py-3 rounded-xl font-semibold text-lg transition-all shadow-md',
+            activeView === 'layer4'
+              ? 'bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white shadow-violet-200'
+              : 'bg-white text-gray-600 hover:bg-gray-50'
+          ]"
+        >
+          🏭 Layer 4: Alignment
         </button>
         <button
           @click="activeView = 'system'; loadSystemData()"
@@ -597,6 +609,11 @@ const getStatusColor = (status) => {
       <!-- ==================== LAYER 3: SENTIMENT ==================== -->
       <div v-if="activeView === 'layer3'" class="space-y-6">
         <SentimentAnalysis />
+      </div>
+
+      <!-- ==================== LAYER 4: ALIGNMENT PIPELINE ==================== -->
+      <div v-if="activeView === 'layer4'" class="space-y-6">
+        <AlignmentDashboard />
       </div>
 
       <!-- ==================== SYSTEM ==================== -->

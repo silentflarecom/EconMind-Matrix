@@ -142,8 +142,32 @@ export const layer3 = {
     exportUrl: (type, format) => `${API_BASE}/api/sentiment/export/${type}?format=${format}`,
 }
 
+/**
+ * Unified API (Phase 4 Integration)
+ */
+export const unified = {
+    base: `${API_BASE}/api/v1`,
+
+    // Unified search across all three layers
+    search: (term, options = {}) => {
+        const params = new URLSearchParams()
+        if (options.includeLayer1 !== undefined) params.append('include_layer1', options.includeLayer1)
+        if (options.includeLayer2 !== undefined) params.append('include_layer2', options.includeLayer2)
+        if (options.includeLayer3 !== undefined) params.append('include_layer3', options.includeLayer3)
+        if (options.daysBack) params.append('days_back', options.daysBack)
+        const queryStr = params.toString()
+        return request(`${API_BASE}/api/v1/search/${encodeURIComponent(term)}${queryStr ? `?${queryStr}` : ''}`)
+    },
+
+    // Trend analysis for a term
+    trend: (term, daysBack = 30) => request(`${API_BASE}/api/v1/trend/${encodeURIComponent(term)}?days_back=${daysBack}`),
+
+    // Health check
+    health: () => request(`${API_BASE}/api/v1/health`),
+}
+
 // Export API base for components that need direct access
 export { API_BASE }
 
 // Default export for convenience
-export default { layer1, layer2, layer3, API_BASE }
+export default { layer1, layer2, layer3, unified, API_BASE }
