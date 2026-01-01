@@ -680,3 +680,159 @@ async def get_supported_formats():
         ]
     }
 
+
+# ==================== CROSS-LINGUAL AUGMENTATION ====================
+
+class AugmentationRequest(BaseModel):
+    """Request body for triggering cross-lingual augmentation."""
+    provider: str = "openai"  # openai or gemini
+    api_key: str = ""
+    api_base: str = ""
+    model: str = ""
+    ratio: float = 0.3
+    batch_size: int = 5
+
+
+class AugmentationStatus(BaseModel):
+    """Status of augmentation operation."""
+    is_running: bool = False
+    progress: float = 0.0
+    message: str = ""
+    output_file: str = ""
+    fed_count: int = 0
+    pboc_count: int = 0
+
+
+# Global status tracker for augmentation
+_augmentation_status = AugmentationStatus()
+
+
+@router.get("/alignment/augmentation/status")
+async def get_augmentation_status():
+    """Get current augmentation status."""
+    # Check for existing augmented output files
+    aug_files = list(DATASET_DIR.glob("cross_lingual_*.jsonl")) if DATASET_DIR.exists() else []
+    latest_file = max(aug_files, key=lambda p: p.stat().st_mtime).name if aug_files else ""
+    
+    # Get policy evidence counts
+    jsonl_file = find_latest_jsonl()
+    fed_count = 0
+    pboc_count = 0
+    
+    if jsonl_file:
+        cells = load_cells_from_jsonl(jsonl_file)
+        for cell in cells:
+            for evidence in cell.get('policy_evidence', []):
+                source = evidence.get('source', '').lower()
+                if source == 'fed':
+                    fed_count += 1
+                elif source == 'pboc':
+                    pboc_count += 1
+    
+    return {
+        "is_running": _augmentation_status.is_running,
+        "progress": _augmentation_status.progress,
+        "message": _augmentation_status.message,
+        "latest_output": latest_file,
+        "fed_count": fed_count,
+        "pboc_count": pboc_count,
+        "support_info": {
+            "providers": ["openai", "gemini"],
+            "default_models": {
+                "openai": "gpt-4o-mini",
+                "gemini": "gemini-1.5-flash"
+            }
+        }
+    }
+
+
+@router.post("/alignment/augmentation/run")
+async def run_augmentation(request: AugmentationRequest):
+    """
+    Trigger cross-lingual augmentation (async background task).
+    
+    NOTE: This endpoint starts the augmentation script as a background process.
+    Check /augmentation/status for progress.
+    """
+    global _augmentation_status
+    
+    if _augmentation_status.is_running:
+        raise HTTPException(status_code=409, detail="Augmentation already in progress")
+    
+    if not request.api_key:
+        raise HTTPException(status_code=400, detail="API key is required")
+    
+    # Find input file
+    input_file = find_latest_jsonl()
+    if not input_file:
+        raise HTTPException(status_code=404, detail="No aligned corpus found. Run alignment pipeline first.")
+    
+    # Prepare output path
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    output_file = DATASET_DIR / f"cross_lingual_{timestamp}.jsonl"
+    
+    # Start augmentation in background
+    import subprocess
+    import threading
+    
+    script_path = Path(__file__).parent.parent / "layer4_alignment" / "scripts" / "cross_lingual_augmentor.py"
+    
+    cmd = [
+        "python", str(script_path),
+        "--input", str(input_file),
+        "--output", str(output_file),
+        "--provider", request.provider,
+        "--api-key", request.api_key,
+        "--ratio", str(request.ratio),
+        "--batch-size", str(request.batch_size)
+    ]
+    
+    if request.api_base:
+        cmd.extend(["--api-base", request.api_base])
+    if request.model:
+        cmd.extend(["--model", request.model])
+    
+    def run_in_background():
+        global _augmentation_status
+        _augmentation_status.is_running = True
+        _augmentation_status.message = "Starting augmentation..."
+        _augmentation_status.progress = 0.0
+        
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            if result.returncode == 0:
+                _augmentation_status.message = "Augmentation complete!"
+                _augmentation_status.output_file = output_file.name
+            else:
+                _augmentation_status.message = f"Error: {result.stderr[:200]}"
+        except Exception as e:
+            _augmentation_status.message = f"Failed: {str(e)}"
+        finally:
+            _augmentation_status.is_running = False
+            _augmentation_status.progress = 1.0
+    
+    thread = threading.Thread(target=run_in_background)
+    thread.start()
+    
+    return {
+        "status": "started",
+        "message": "Augmentation started in background. Check /augmentation/status for progress.",
+        "output_file": output_file.name
+    }
+
+
+@router.get("/alignment/augmentation/download/{filename}")
+async def download_augmented_file(filename: str):
+    """Download a generated augmented training file."""
+    filepath = DATASET_DIR / filename
+    
+    if not filepath.exists() or not filename.startswith("cross_lingual_"):
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    content = filepath.read_text(encoding='utf-8')
+    
+    return StreamingResponse(
+        io.BytesIO(content.encode('utf-8')),
+        media_type="application/jsonl",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )

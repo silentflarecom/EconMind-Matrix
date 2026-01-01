@@ -174,6 +174,91 @@
       <h3>📈 Quality Report</h3>
       <div class="report-content" v-html="qualityReport"></div>
     </div>
+
+    <!-- Cross-Lingual Augmentation Panel -->
+    <div class="augmentation-section">
+      <div class="section-header">
+        <h3>🌐 Cross-Lingual Augmentation</h3>
+        <span class="aug-badge" :class="augStatus.is_running ? 'running' : 'ready'">
+          {{ augStatus.is_running ? '⏳ Running...' : '✅ Ready' }}
+        </span>
+      </div>
+      
+      <p class="aug-description">
+        Generate cross-lingual training data by translating FED→中文 and PBOC→English using LLM APIs.
+        This solves the "knowledge silo" problem.
+      </p>
+      
+      <div class="aug-stats">
+        <div class="stat-chip fed">FED: {{ augStatus.fed_count }} records</div>
+        <div class="stat-chip pboc">PBOC: {{ augStatus.pboc_count }} records</div>
+        <div v-if="augStatus.latest_output" class="stat-chip output">
+          Latest: {{ augStatus.latest_output }}
+        </div>
+      </div>
+      
+      <div class="aug-form">
+        <div class="form-row">
+          <label>API Provider:</label>
+          <select v-model="augConfig.provider" class="aug-select">
+            <option value="openai">OpenAI</option>
+            <option value="gemini">Gemini</option>
+          </select>
+        </div>
+        
+        <div class="form-row">
+          <label>API Key:</label>
+          <input 
+            type="password" 
+            v-model="augConfig.api_key" 
+            placeholder="sk-xxx or AIza..."
+            class="aug-input"
+          />
+        </div>
+        
+        <div class="form-row">
+          <label>Model:</label>
+          <input 
+            type="text" 
+            v-model="augConfig.model" 
+            :placeholder="augConfig.provider === 'openai' ? 'gpt-4o-mini' : 'gemini-1.5-flash'"
+            class="aug-input"
+          />
+        </div>
+        
+        <div class="form-row">
+          <label>Ratio ({{ Math.round(augConfig.ratio * 100) }}% augmented):</label>
+          <input 
+            type="range" 
+            v-model="augConfig.ratio" 
+            min="0.1" 
+            max="0.5" 
+            step="0.05"
+            class="aug-slider"
+          />
+        </div>
+        
+        <div class="form-actions">
+          <button 
+            class="run-aug-btn" 
+            @click="runAugmentation"
+            :disabled="augStatus.is_running || !augConfig.api_key"
+          >
+            🚀 Run Augmentation
+          </button>
+          <button 
+            class="refresh-status-btn"
+            @click="loadAugmentationStatus"
+          >
+            🔄 Refresh Status
+          </button>
+        </div>
+        
+        <div v-if="augStatus.message" class="aug-message" :class="augStatus.is_running ? 'info' : 'success'">
+          {{ augStatus.message }}
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -188,6 +273,24 @@ const error = ref(null)
 const expandedCell = ref(null)
 const qualityReport = ref(null)
 const languageInfo = ref({ languages: [], language_stats: {} })
+
+// Cross-Lingual Augmentation State
+const augStatus = ref({
+  is_running: false,
+  progress: 0,
+  message: '',
+  latest_output: '',
+  fed_count: 0,
+  pboc_count: 0
+})
+
+const augConfig = ref({
+  provider: 'openai',
+  api_key: '',
+  model: '',
+  ratio: 0.3,
+  batch_size: 5
+})
 
 const stats = computed(() => {
   if (cells.value.length === 0) {
@@ -307,8 +410,52 @@ const getLanguageName = (code) => {
   return languageNames[code] || code.toUpperCase()
 }
 
+// Cross-Lingual Augmentation Functions
+const loadAugmentationStatus = async () => {
+  try {
+    const response = await axios.get(`${API_BASE}/api/v1/alignment/augmentation/status`)
+    augStatus.value = response.data
+  } catch (err) {
+    console.warn('Failed to load augmentation status:', err)
+  }
+}
+
+const runAugmentation = async () => {
+  if (!augConfig.value.api_key) {
+    alert('Please enter an API key')
+    return
+  }
+  
+  try {
+    augStatus.value.is_running = true
+    augStatus.value.message = 'Starting augmentation...'
+    
+    await axios.post(`${API_BASE}/api/v1/alignment/augmentation/run`, {
+      provider: augConfig.value.provider,
+      api_key: augConfig.value.api_key,
+      api_base: '',
+      model: augConfig.value.model,
+      ratio: parseFloat(augConfig.value.ratio),
+      batch_size: augConfig.value.batch_size
+    })
+    
+    // Poll for status updates
+    const pollInterval = setInterval(async () => {
+      await loadAugmentationStatus()
+      if (!augStatus.value.is_running) {
+        clearInterval(pollInterval)
+      }
+    }, 3000)
+    
+  } catch (err) {
+    augStatus.value.is_running = false
+    augStatus.value.message = `Error: ${err.response?.data?.detail || err.message}`
+  }
+}
+
 onMounted(() => {
   loadData()
+  loadAugmentationStatus()
 })
 </script>
 
@@ -757,5 +904,196 @@ onMounted(() => {
   .stats-grid {
     grid-template-columns: 1fr;
   }
+}
+
+/* Cross-Lingual Augmentation Section */
+.augmentation-section {
+  background: linear-gradient(135deg, #1e3a5f 0%, #0d2137 100%);
+  border-radius: 16px;
+  padding: 24px;
+  margin-top: 24px;
+  color: white;
+}
+
+.augmentation-section h3 {
+  margin: 0;
+  color: white;
+}
+
+.aug-badge {
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.aug-badge.ready {
+  background: #10b981;
+  color: white;
+}
+
+.aug-badge.running {
+  background: #f59e0b;
+  color: white;
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+.aug-description {
+  color: #94a3b8;
+  margin: 12px 0;
+  font-size: 14px;
+}
+
+.aug-stats {
+  display: flex;
+  gap: 12px;
+  margin: 16px 0;
+  flex-wrap: wrap;
+}
+
+.stat-chip {
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.stat-chip.fed {
+  background: rgba(59, 130, 246, 0.3);
+  color: #93c5fd;
+  border: 1px solid rgba(59, 130, 246, 0.5);
+}
+
+.stat-chip.pboc {
+  background: rgba(239, 68, 68, 0.3);
+  color: #fca5a5;
+  border: 1px solid rgba(239, 68, 68, 0.5);
+}
+
+.stat-chip.output {
+  background: rgba(16, 185, 129, 0.3);
+  color: #6ee7b7;
+  border: 1px solid rgba(16, 185, 129, 0.5);
+}
+
+.aug-form {
+  margin-top: 20px;
+}
+
+.form-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.form-row label {
+  min-width: 140px;
+  font-size: 14px;
+  color: #cbd5e1;
+}
+
+.aug-select, .aug-input {
+  flex: 1;
+  max-width: 300px;
+  padding: 10px 14px;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+  font-size: 14px;
+  outline: none;
+  transition: all 0.3s;
+}
+
+.aug-select:focus, .aug-input:focus {
+  border-color: #3b82f6;
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.aug-slider {
+  flex: 1;
+  max-width: 200px;
+  height: 6px;
+  -webkit-appearance: none;
+  appearance: none;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.aug-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #3b82f6;
+  cursor: pointer;
+}
+
+.form-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.run-aug-btn {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+  border: none;
+  padding: 12px 24px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  transition: all 0.3s;
+}
+
+.run-aug-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(16, 185, 129, 0.4);
+}
+
+.run-aug-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.refresh-status-btn {
+  background: rgba(255, 255, 255, 0.15);
+  color: white;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  padding: 10px 20px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.3s;
+}
+
+.refresh-status-btn:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.aug-message {
+  margin-top: 16px;
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+.aug-message.info {
+  background: rgba(59, 130, 246, 0.2);
+  border: 1px solid rgba(59, 130, 246, 0.4);
+  color: #93c5fd;
+}
+
+.aug-message.success {
+  background: rgba(16, 185, 129, 0.2);
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  color: #6ee7b7;
 }
 </style>

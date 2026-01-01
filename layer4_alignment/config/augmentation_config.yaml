@@ -1,0 +1,92 @@
+# Cross-Lingual Augmentation Configuration
+# ==========================================
+# This config controls how the cross-lingual augmentation script processes
+# financial data from FED and PBOC sources.
+
+# API Configuration
+# -----------------
+# Provider: "openai" or "gemini"
+# API keys can be set here or via environment variables:
+#   - OPENAI_API_KEY
+#   - GEMINI_API_KEY
+
+api:
+  provider: "openai"  # or "gemini"
+  
+  # Leave blank to use environment variable
+  # WARNING: Do not commit API keys to version control!
+  api_key: ""
+  
+  # Custom API endpoint (optional)
+  # Useful for Azure OpenAI or proxy servers
+  base_url: ""
+  
+  # Model selection
+  # OpenAI: gpt-4o-mini, gpt-4o, gpt-4-turbo
+  # Gemini: gemini-1.5-flash, gemini-1.5-pro
+  model: "gpt-4o-mini"
+
+# Processing Configuration
+# ------------------------
+processing:
+  # Augmentation ratio: proportion of augmented data in final output
+  # 0.3 = 70% native + 30% augmented (recommended)
+  augmentation_ratio: 0.3
+  
+  # Concurrent API calls per batch
+  # Higher = faster but may hit rate limits
+  batch_size: 5
+  
+  # Maximum retry attempts for failed API calls
+  max_retries: 3
+  
+  # Timeout in seconds for each API call
+  timeout_seconds: 60
+
+# Output Configuration
+# --------------------
+output:
+  # Output format: currently only "sharegpt" supported
+  format: "sharegpt"
+  
+  # Include metadata in output (source, term, alignment_score, etc.)
+  include_metadata: true
+
+# Language-Source Mapping
+# -----------------------
+# Defines which source maps to which language
+# This is used for cross-lingual augmentation direction
+language_source_map:
+  zh: "pboc"  # Chinese → PBOC native
+  en: "fed"   # English → FED native
+
+# Prompts Configuration
+# ---------------------
+# Custom prompts for cross-lingual augmentation
+# You can modify these to change the analysis style
+prompts:
+  fed_to_zh:
+    system: "你是一位资深中国宏观经济学家和金融分析师。你精通美联储货币政策分析，能够用专业的中文金融术语解读美联储声明。"
+    user_template: |
+      请以中国宏观经济学家的视角，用专业的中文金融术语分析以下美联储声明：
+      
+      【美联储原文】
+      {text}
+      
+      请提供：
+      1. 核心政策要点的中文解读
+      2. 对中国经济的潜在影响分析
+      3. 使用专业中文金融术语
+  
+  pboc_to_en:
+    system: "You are a senior Wall Street analyst and macro-economist specializing in Chinese monetary policy."
+    user_template: |
+      As a Wall Street analyst, provide a professional English analysis of this PBOC statement:
+      
+      【PBOC Original (Chinese)】
+      {text}
+      
+      Please provide:
+      1. Key policy points in professional English
+      2. Implications for global markets
+      3. Use proper financial terminology
